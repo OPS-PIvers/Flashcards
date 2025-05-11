@@ -1,0 +1,347 @@
+/**
+ * Initialize the application
+ * 
+ * @param {Object} options - Initialization options
+ */
+function initApp(options) {
+  // Set defaults for missing options
+  options = options || {};
+  
+  // Store app state with defensive initialization
+  window.app = {
+    isLoggedIn: Boolean(options.isLoggedIn),
+    isAdmin: Boolean(options.isAdmin),
+    userName: options.userName || '',
+    currentDeck: null,
+    currentCards: [],
+    currentCardIndex: 0
+  };
+  
+  // Setup event listeners
+  setupEventListeners();
+  
+  // Load initial page - with proper authentication checking
+  if (window.app.isLoggedIn) {
+    loadDeckList();
+  } else {
+    showLoginForm();
+  }
+  
+  // Hide loading indicator
+  hideLoadingIndicator();
+}
+
+/**
+ * Setup core event listeners
+ */
+function setupEventListeners() {
+  // Logout button
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+  }
+  
+  // Admin panel button
+  const adminPanelBtn = document.getElementById('adminPanelBtn');
+  if (adminPanelBtn) {
+    adminPanelBtn.addEventListener('click', loadAdminPanel);
+  }
+}
+
+/**
+ * Handle user logout
+ */
+function handleLogout() {
+  showLoadingIndicator();
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      // Defensive check for null/undefined result
+      if (!result) {
+        hideLoadingIndicator();
+        handleError('Server returned an empty response during logout');
+        return;
+      }
+      
+      // Update app state regardless of result success
+      window.app.isLoggedIn = false;
+      window.app.isAdmin = false;
+      window.app.userName = '';
+      
+      // Hide user info
+      const userInfo = document.getElementById('userInfo');
+      if (userInfo) {
+        userInfo.style.display = 'none';
+      }
+      
+      // Show login form
+      showLoginForm();
+      
+      if (result.success) {
+        showSuccess('Logged out successfully');
+      } else {
+        // Log error but still proceed with logout on client side
+        console.error('Logout error on server:', result.message);
+      }
+      
+      hideLoadingIndicator();
+    })
+    .withFailureHandler(function(error) {
+      console.error('Logout failed:', error);
+      
+      // Force logout on client side even if server call fails
+      window.app.isLoggedIn = false;
+      window.app.isAdmin = false;
+      window.app.userName = '';
+      
+      const userInfo = document.getElementById('userInfo');
+      if (userInfo) {
+        userInfo.style.display = 'none';
+      }
+      
+      showLoginForm();
+      handleError('Logout failed: ' + (error ? error.toString() : 'Unknown error'));
+      hideLoadingIndicator();
+    })
+    .logoutUser();
+}
+
+/**
+ * Show the login form
+ */
+function showLoginForm() {
+  const contentArea = document.getElementById('appContent');
+  if (!contentArea) {
+    console.error('Content area not found');
+    return;
+  }
+  
+  contentArea.innerHTML = '';
+  
+  // Get login form HTML
+  const loginForm = document.getElementById('loginFormTemplate');
+  if (loginForm) {
+    contentArea.appendChild(loginForm.content.cloneNode(true));
+    
+    // Setup login form event listeners
+    const loginFormElement = document.getElementById('loginForm');
+    if (loginFormElement) {
+      loginFormElement.addEventListener('submit', handleLogin);
+    } else {
+      console.error('Login form element not found after template cloning');
+    }
+    
+    // Optional: Setup password toggle
+    const passwordToggle = document.getElementById('passwordToggle');
+    if (passwordToggle) {
+      passwordToggle.addEventListener('click', togglePasswordVisibility);
+    }
+  } else {
+    contentArea.innerHTML = '<div class="card"><div class="card-title">Error</div><p>Login form template not found. Please refresh the page or contact your administrator.</p></div>';
+  }
+}
+
+/**
+ * Load the deck list
+ */
+function loadDeckList() {
+  showLoadingIndicator();
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      // Robust null/undefined checking
+      if (!result) {
+        handleError('Server returned an empty response');
+        hideLoadingIndicator();
+        return;
+      }
+      
+      if (result.success) {
+        displayDeckList(result.decks || [], result.dueCardsByDeck || {});
+      } else {
+        if (result.message === 'User not logged in') {
+          // If not logged in, redirect to login
+          showLoginForm();
+          showError('Your session has expired. Please log in again.');
+        } else {
+          handleError(result.message || 'Unknown error occurred');
+        }
+      }
+      
+      hideLoadingIndicator();
+    })
+    .withFailureHandler(function(error) {
+      handleError(error ? error.toString() : 'Unknown error occurred');
+      hideLoadingIndicator();
+      
+      // If there's a critical error, show login form as fallback
+      showLoginForm();
+    })
+    .getUserDueCards();
+}
+
+/**
+ * Display the list of available decks
+ * 
+ * @param {Array} decks - List of deck names
+ * @param {Object} dueCardsByDeck - Due cards by deck
+ */
+function displayDeckList(decks, dueCardsByDeck) {
+  // Ensure parameters are valid to prevent errors
+  decks = decks || [];
+  dueCardsByDeck = dueCardsByDeck || {};
+  
+  const contentArea = document.getElementById('appContent');
+  if (!contentArea) {
+    console.error('Cannot find appContent element');
+    return;
+  }
+  
+  let html = `
+    <div class="card">
+      <div class="card-title">Your Flashcard Decks</div>
+      <div class="deck-list">
+  `;
+  
+  if (decks.length === 0) {
+    html += `<p>No flashcard decks available. Please contact an administrator.</p>`;
+  } else {
+    decks.forEach(deckName => {
+      const deckStats = dueCardsByDeck[deckName] || { totalCards: 0, dueCards: 0 };
+      html += `
+        <div class="deck-card" data-deck="${deckName}">
+          <div class="deck-title">${deckName}</div>
+          <div class="deck-stats">
+            <span>${deckStats.dueCards || 0} cards due</span>
+            <span>${deckStats.totalCards || 0} total</span>
+          </div>
+        </div>
+      `;
+    });
+  }
+  
+  html += `
+      </div>
+    </div>
+  `;
+  
+  contentArea.innerHTML = html;
+  
+  // Add click event listeners to deck cards
+  document.querySelectorAll('.deck-card').forEach(card => {
+    card.addEventListener('click', function() {
+      const deckName = this.getAttribute('data-deck');
+      if (deckName) {
+        loadDeck(deckName);
+      } else {
+        console.error('Deck name attribute missing');
+      }
+    });
+  });
+}
+
+/**
+ * Handle general errors
+ * 
+ * @param {string} errorMsg - Error message
+ */
+function handleError(errorMsg) {
+  hideLoadingIndicator();
+  
+  // Default message if none provided
+  errorMsg = errorMsg || 'An unknown error occurred';
+  
+  console.error('Error:', errorMsg);
+  
+  // Show error notification
+  const notification = document.createElement('div');
+  notification.className = 'notification error';
+  notification.innerHTML = `
+    <div class="notification-content">
+      <span class="material-icons">error</span>
+      <span>${errorMsg}</span>
+    </div>
+    <button class="notification-close">
+      <span class="material-icons">close</span>
+    </button>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.remove();
+    }
+  }, 5000);
+  
+  // Add close button functionality
+  const closeBtn = notification.querySelector('.notification-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      notification.remove();
+    });
+  }
+}
+
+/**
+ * Show loading indicator
+ */
+function showLoadingIndicator() {
+  const loader = document.getElementById('loadingIndicator');
+  if (loader) {
+    loader.style.display = 'flex';
+  } else {
+    console.warn('Loading indicator not found');
+  }
+}
+
+/**
+ * Hide loading indicator
+ */
+function hideLoadingIndicator() {
+  const loader = document.getElementById('loadingIndicator');
+  if (loader) {
+    loader.style.display = 'none';
+  }
+}
+
+/**
+ * Show a success notification
+ * 
+ * @param {string} message - Success message
+ */
+function showSuccess(message) {
+  // Default message if none provided
+  message = message || 'Operation completed successfully';
+  
+  // Show success notification
+  const notification = document.createElement('div');
+  notification.className = 'notification success';
+  notification.innerHTML = `
+    <div class="notification-content">
+      <span class="material-icons">check_circle</span>
+      <span>${message}</span>
+    </div>
+    <button class="notification-close">
+      <span class="material-icons">close</span>
+    </button>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.remove();
+    }
+  }, 3000);
+  
+  // Add close button functionality
+  const closeBtn = notification.querySelector('.notification-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      notification.remove();
+    });
+  }
+}

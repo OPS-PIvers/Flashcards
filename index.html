@@ -1,455 +1,79 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flashcard Generator (from Google Sheet)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-
-    <style>
-        /* --- Base Styles & Variables --- */
-        :root {
-            --light-bg: #f8f9fa;
-            --dark-bg: #202124;
-            --light-surface: #ffffff;
-            --dark-surface: #2d2e30;
-            --light-text-primary: #202124;
-            --dark-text-primary: #e8eaed;
-            --light-text-secondary: #5f6368;
-            --dark-text-secondary: #bdc1c6;
-            --light-primary: #1a73e8;
-            --dark-primary: #8ab4f8;
-            --light-primary-hover: #185abc;
-            --dark-primary-hover: #aecbfa;
-            --light-border: #dadce0;
-            --dark-border: #5f6368;
-            --light-error: #d93025;
-            --dark-error: #f28b82;
-            --light-card-bg: #e8f0fe; /* Light blue background for cards */
-            --dark-card-bg: #3c4043; /* Darker grey for cards */
-            --light-disabled-bg: #e0e0e0;
-            --dark-disabled-bg: #3c4043;
-            --light-disabled-text: #a0a0a0;
-            --dark-disabled-text: #7f8184;
-            --light-shadow-color-1: rgba(60, 64, 67, 0.15);
-            --dark-shadow-color-1: rgba(0, 0, 0, 0.3);
-            --light-shadow-color-2: rgba(60, 64, 67, 0.1);
-            --dark-shadow-color-2: rgba(0, 0, 0, 0.2);
-            --light-focus-shadow-color: rgba(26, 115, 232, 0.2);
-            --dark-focus-shadow-color: rgba(138, 180, 248, 0.3);
-            --light-button-focus-shadow-color: rgba(26, 115, 232, 0.3);
-            --dark-button-focus-shadow-color: rgba(138, 180, 248, 0.4);
-            --light-button-text: white;
-            --dark-button-text: var(--dark-bg);
-            --flashcard-width: 220px;
-            --flashcard-height: 150px;
-        }
-
-        /* --- General Body and Container Styling --- */
-        body {
-            /* Use Inter as primary, fallback to Google Sans/Roboto */
-            font-family: 'Inter', 'Google Sans', Roboto, Arial, sans-serif;
-            margin: 0;
-            background-color: light-dark(var(--light-bg), var(--dark-bg));
-            color: light-dark(var(--light-text-primary), var(--dark-text-primary));
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .container {
-            background-color: light-dark(var(--light-surface), var(--dark-surface));
-            padding: 30px 40px; /* Adjusted padding */
-            border-radius: 12px;
-            box-shadow: 0 1px 3px light-dark(var(--light-shadow-color-1), var(--dark-shadow-color-1)),
-                        0 4px 8px light-dark(var(--light-shadow-color-2), var(--dark-shadow-color-2));
-            width: 90%;
-            max-width: 800px;
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        h1 {
-            color: light-dark(var(--light-primary), var(--dark-primary));
-            margin-bottom: 15px;
-            font-size: 1.8em; /* Slightly smaller */
-            font-weight: 500;
-        }
-
-        p.description { /* Added class for description */
-            margin-bottom: 25px;
-            color: light-dark(var(--light-text-secondary), var(--dark-text-secondary));
-            line-height: 1.6;
-            font-size: 0.95em;
-        }
-
-        /* --- Input and Button Styling --- */
-         label {
-            display: block;
-            text-align: left;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: light-dark(var(--light-text-secondary), var(--dark-text-secondary));
-         }
-
-        input[type="url"] { /* Changed from textarea */
-            width: calc(100% - 32px); /* Adjusted width for padding */
-            padding: 12px 15px; /* Adjusted padding */
-            margin-bottom: 25px;
-            border: 1px solid light-dark(var(--light-border), var(--dark-border));
-            border-radius: 8px;
-            font-size: 15px; /* Adjusted font size */
-            background-color: light-dark(var(--light-bg), var(--dark-card-bg));
-            color: light-dark(var(--light-text-primary), var(--dark-text-primary));
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        input[type="url"]:focus {
-            outline: none;
-            border-color: light-dark(var(--light-primary), var(--dark-primary));
-            box-shadow: 0 0 0 2px light-dark(var(--light-focus-shadow-color), var(--dark-focus-shadow-color));
-        }
-
-        button {
-            background-color: light-dark(var(--light-primary), var(--dark-primary));
-            color: light-dark(var(--light-button-text), var(--dark-button-text));
-            padding: 12px 24px; /* Adjusted padding */
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 15px; /* Adjusted font size */
-            font-weight: 500;
-            transition: background-color 0.3s ease, box-shadow 0.2s ease;
-            box-shadow: 0 1px 2px light-dark(var(--light-shadow-color-2), var(--dark-shadow-color-2));
-            width: 100%; /* Make button full width */
-            max-width: 300px; /* Optional: max width for larger screens */
-            margin: 0 auto; /* Center button */
-            display: block;
-        }
-
-        button:hover {
-            background-color: light-dark(var(--light-primary-hover), var(--dark-primary-hover));
-            box-shadow: 0 1px 3px light-dark(var(--light-shadow-color-1), var(--dark-shadow-color-1));
-        }
-
-        button:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px light-dark(var(--light-button-focus-shadow-color), var(--dark-button-focus-shadow-color));
-        }
-
-        button:disabled {
-            background-color: light-dark(var(--light-disabled-bg), var(--dark-disabled-bg));
-            color: light-dark(var(--light-disabled-text), var(--dark-disabled-text));
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        /* --- Error Message Styling --- */
-        .status-message { /* Renamed from error-message */
-            margin-top: 20px;
-            font-weight: 500;
-            min-height: 1.5em;
-            /* Color will be set dynamically via JS */
-        }
-        .error-text {
-             color: light-dark(var(--light-error), var(--dark-error));
-        }
-        .loading-text {
-             color: light-dark(var(--light-text-secondary), var(--dark-text-secondary));
-        }
-        .success-text {
-             color: light-dark(var(--light-primary), var(--dark-primary)); /* Or a green color */
-        }
-
-
-        /* --- Flashcard Container and Card Styling --- */
-        .flashcards-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px; /* Adjusted gap */
-            margin-top: 30px; /* Adjusted margin */
-            justify-content: center;
-            perspective: 1000px;
-        }
-
-        .flashcard {
-            background-color: transparent;
-            width: var(--flashcard-width);
-            height: var(--flashcard-height);
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            perspective: 1000px;
-            box-shadow: none;
-        }
-
-        .flashcard-inner {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            text-align: center;
-            transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1); /* Smoother transition */
-            transform-style: preserve-3d;
-            box-shadow: 0 1px 2px light-dark(var(--light-shadow-color-2), var(--dark-shadow-color-2));
-            border-radius: 10px;
-        }
-
-        .flashcard.flipped .flashcard-inner {
-            transform: rotateY(180deg);
-        }
-
-        .flashcard-front,
-        .flashcard-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 15px; /* Adjusted padding */
-            box-sizing: border-box;
-            border-radius: 10px;
-            border: 1px solid light-dark(var(--light-border), var(--dark-border));
-            background-color: light-dark(var(--light-card-bg), var(--dark-card-bg));
-            overflow-wrap: break-word; /* Wrap long words */
-            word-wrap: break-word;
-             hyphens: auto; /* Add hyphens if needed */
-        }
-
-        .flashcard-back {
-            transform: rotateY(180deg);
-            /* Optional: Slightly different background for back */
-            /* background-color: light-dark(#d6e4fd, #4a4e51); */
-        }
-
-        .flashcard:hover .flashcard-inner {
-            box-shadow: 0 4px 8px light-dark(var(--light-shadow-color-1), var(--dark-shadow-color-1));
-        }
-
-        /* --- Term and Definition Styling --- */
-        .term {
-            font-size: 1.1em; /* Adjusted size */
-            font-weight: 500;
-            color: light-dark(var(--light-text-primary), var(--dark-text-primary));
-            margin-bottom: 5px; /* Add some space if needed */
-        }
-
-        .definition {
-            font-size: 0.95em; /* Adjusted size */
-            color: light-dark(var(--light-text-secondary), var(--dark-text-secondary));
-            line-height: 1.4;
-        }
-
-        /* --- Footer Styling --- */
-        footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid light-dark(var(--light-border), var(--dark-border));
-            color: light-dark(var(--light-text-secondary), var(--dark-text-secondary));
-            font-size: 0.85em;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="container">
-        <h1>Flashcard Generator</h1>
-        <p class="description">
-            Paste the URL of a Google Sheet (published as CSV) below.
-            The sheet should have terms in the first column and definitions in the second.
-        </p>
-
-        <div class="mb-4">
-             <label for="sheetUrlInput">Google Sheet CSV URL:</label>
-            <input
-                type="url"
-                id="sheetUrlInput"
-                placeholder="Paste your published Google Sheet CSV URL here"
-            />
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title><?= data.title ?></title>
+    
+    <!-- Include Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Include Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <!-- Include CSS -->
+    <?!= include('css/style'); ?>
+    
+    <!-- Include ALL core JavaScript regardless of login state -->
+    <?!= include('js/main'); ?>
+    <?!= include('js/auth'); ?>
+    <?!= include('js/flashcards'); ?>
+    
+    <!-- Include admin JavaScript if user is admin -->
+    <? if (data.isAdmin) { ?>
+      <?!= include('js/admin'); ?>
+      <?!= include('js/dictionary'); ?>
+    <? } ?>
+  </head>
+  <body>
+    <div class="app-container">
+      <header class="app-header">
+        <div class="app-title">
+          <h1>Flashcard App</h1>
         </div>
-
-        <button id="loadButton">Load Flashcards</button>
-
-        <div id="statusMessage" class="status-message"></div>
-
-        <div id="flashcardsContainer" class="flashcards-container">
-            </div>
-
-        <footer>
-            Make sure your Google Sheet is published to the web as a CSV file.
-            (File > Share > Publish to web)
-        </footer>
+        <div class="user-info" id="userInfo" style="display: <?= data.isLoggedIn ? 'flex' : 'none' ?>;">
+          <span>Welcome, <?= data.userName ?></span>
+          <button id="logoutBtn" class="btn-text">Logout</button>
+          <? if (data.isAdmin) { ?>
+          <button id="adminPanelBtn" class="btn-text">Admin Panel</button>
+          <? } ?>
+        </div>
+      </header>
+      
+      <main class="app-content" id="appContent">
+        <!-- Content will be loaded here -->
+        <div id="loadingIndicator" class="loading-indicator">
+          <div class="spinner"></div>
+          <p>Loading...</p>
+        </div>
+      </main>
+      
+      <footer class="app-footer">
+        <p>&copy; 2025 Flashcard App</p>
+      </footer>
     </div>
-
-    <script type="module">
-        // --- DOM Element References ---
-        const sheetUrlInput = document.getElementById('sheetUrlInput');
-        const loadButton = document.getElementById('loadButton');
-        const flashcardsContainer = document.getElementById('flashcardsContainer');
-        const statusMessage = document.getElementById('statusMessage');
-
-        // --- Function to display status messages ---
-        function showStatus(message, type = 'error') {
-            statusMessage.textContent = message;
-            statusMessage.className = 'status-message'; // Reset classes
-            if (type === 'error') {
-                statusMessage.classList.add('error-text');
-            } else if (type === 'loading') {
-                statusMessage.classList.add('loading-text');
-            } else if (type === 'success') {
-                 statusMessage.classList.add('success-text');
-            }
-        }
-
-        // --- Function to parse CSV data ---
-        // Simple CSV parser assuming no commas within quoted fields
-        function parseCSV(csvText) {
-            const lines = csvText.trim().split('\n');
-            return lines.map(line => {
-                // Split by comma, handling potential extra whitespace around commas
-                const parts = line.split(',').map(part => part.trim());
-                if (parts.length >= 2 && parts[0] && parts[1]) {
-                    // Assume term is first column, definition is second
-                    // Combine remaining parts for definition if definition itself contains commas (basic handling)
-                     const term = parts[0];
-                     const definition = parts.slice(1).join(',').trim(); // Join back if definition had commas
-                     // Remove surrounding quotes if present (simple check)
-                     const cleanTerm = term.startsWith('"') && term.endsWith('"') ? term.slice(1, -1) : term;
-                     const cleanDefinition = definition.startsWith('"') && definition.endsWith('"') ? definition.slice(1, -1) : definition;
-
-                    if (cleanTerm && cleanDefinition) {
-                         return { term: cleanTerm, definition: cleanDefinition };
-                    }
-                }
-                return null; // Return null for invalid lines
-            }).filter(card => card !== null); // Filter out invalid entries
-        }
-
-        // --- Function to display flashcards ---
-        function displayFlashcards(flashcards) {
-            flashcardsContainer.innerHTML = ''; // Clear previous cards
-            if (flashcards.length === 0) {
-                showStatus('No valid flashcard data found in the sheet.', 'error');
-                return;
-            }
-
-            flashcards.forEach((flashcard, index) => {
-                // Create card structure (same as before)
-                const cardDiv = document.createElement('div');
-                cardDiv.classList.add('flashcard'); // Removed margin here, added gap in container
-                cardDiv.dataset['index'] = index.toString();
-
-                const cardInner = document.createElement('div');
-                cardInner.classList.add('flashcard-inner');
-
-                const cardFront = document.createElement('div');
-                cardFront.classList.add('flashcard-front');
-
-                const termDiv = document.createElement('div');
-                termDiv.classList.add('term');
-                termDiv.textContent = flashcard.term;
-
-                const cardBack = document.createElement('div');
-                cardBack.classList.add('flashcard-back');
-
-                const definitionDiv = document.createElement('div');
-                definitionDiv.classList.add('definition');
-                definitionDiv.textContent = flashcard.definition;
-
-                // Assemble the card
-                cardFront.appendChild(termDiv);
-                cardBack.appendChild(definitionDiv);
-                cardInner.appendChild(cardFront);
-                cardInner.appendChild(cardBack);
-                cardDiv.appendChild(cardInner);
-
-                flashcardsContainer.appendChild(cardDiv);
-
-                // Add click listener to toggle the 'flipped' class
-                cardDiv.addEventListener('click', () => {
-                    cardDiv.classList.toggle('flipped');
-                });
-            });
-             showStatus(`Loaded ${flashcards.length} flashcards successfully.`, 'success');
-        }
-
-        // --- Event Listener for Load Button ---
-        loadButton.addEventListener('click', async () => {
-            const sheetUrl = sheetUrlInput.value.trim();
-
-            // Basic URL validation
-            if (!sheetUrl || !sheetUrl.startsWith('http')) {
-                showStatus('Please enter a valid Google Sheet CSV URL.', 'error');
-                flashcardsContainer.innerHTML = '';
-                return;
-            }
-
-            // --- UI Updates: Start Loading ---
-            showStatus('Loading flashcards from Google Sheet...', 'loading');
-            flashcardsContainer.innerHTML = ''; // Clear previous cards
-            loadButton.disabled = true; // Disable button during loading
-
-            try {
-                // --- Fetch the CSV data ---
-                // Adding a timestamp query parameter to try and bypass cache
-                const urlToFetch = `${sheetUrl}&timestamp=${new Date().getTime()}`;
-                const response = await fetch(urlToFetch);
-
-                if (!response.ok) {
-                    // Handle HTTP errors (like 404 Not Found, 403 Forbidden)
-                     let errorMsg = `Failed to fetch data. Status: ${response.status}`;
-                     if (response.status === 403) {
-                         errorMsg += ' (Check if the sheet is published correctly and accessible).';
-                     } else if (response.status === 404) {
-                         errorMsg += ' (Sheet not found at this URL).';
-                     }
-                    throw new Error(errorMsg);
-                }
-
-                const csvText = await response.text();
-
-                // --- Process the Response ---
-                if (csvText) {
-                    const flashcards = parseCSV(csvText);
-                    displayFlashcards(flashcards); // Display the parsed cards
-                } else {
-                    showStatus('Received empty data from the sheet.', 'error');
-                }
-
-            } catch (error) {
-                // --- Handle Errors ---
-                console.error('Error loading or parsing sheet data:', error);
-                let detailedError = 'An unknown error occurred.';
-                if (error instanceof Error) {
-                    // Check for network errors specifically
-                    if (error.message.includes('Failed to fetch')) {
-                         detailedError = 'Network error. Please check your connection and the URL.';
-                    } else {
-                         detailedError = error.message;
-                    }
-                }
-                showStatus(`Error: ${detailedError}`, 'error');
-                flashcardsContainer.innerHTML = ''; // Clear cards on error
-
-            } finally {
-                // --- UI Updates: End Loading ---
-                loadButton.disabled = false; // Re-enable button
-            }
+    
+    <!-- Initialize App -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Initialize the app
+        initApp({
+          isLoggedIn: <?= Boolean(data.isLoggedIn) ? 'true' : 'false' ?>,
+          isAdmin: <?= Boolean(data.isAdmin) ? 'true' : 'false' ?>,
+          userName: "<?= data.userName || '' ?>",
+          initialPage: '<?= data.page ?>'
         });
-
+      });
     </script>
-
-</body>
+    
+    <!-- Include all partial templates -->
+    <?!= include('partials/login'); ?>
+    <?!= include('partials/flashcardView'); ?>
+    <?!= include('partials/deckList'); ?>
+    <? if (data.isAdmin) { ?>
+      <?!= include('partials/adminPanel'); ?>
+      <?!= include('partials/dictionaryLookup'); ?>
+    <? } ?>
+  </body>
 </html>
-<link rel="stylesheet" href="index.css">
-<script src="index.tsx" type="module"></script>

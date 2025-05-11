@@ -1,0 +1,645 @@
+<script>
+  /**
+   * Load the admin panel
+   */
+  function loadAdminPanel() {
+    // First check admin access
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (!result.success || !result.isAdmin) {
+          showError('Admin access required');
+          hideLoadingIndicator();
+          return;
+        }
+        
+        // Load admin panel template
+        const contentArea = document.getElementById('appContent');
+        contentArea.innerHTML = document.getElementById('adminPanelTemplate').innerHTML;
+        
+        // Setup tab switching
+        setupAdminTabs();
+        
+        // Load deck list
+        loadAdminDeckList();
+        
+        // Load user list
+        loadUserList();
+        
+        // Initialize dictionary lookup
+        initDictionaryLookup();
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .getAdminAccess();
+  }
+  
+  /**
+   * Setup tab switching in admin panel
+   */
+  function setupAdminTabs() {
+    const tabs = document.querySelectorAll('.admin-tab');
+    
+    tabs.forEach(tab => {
+      tab.addEventListener('click', function() {
+        // Remove active class from all tabs
+        tabs.forEach(t => t.classList.remove('active'));
+        
+        // Add active class to clicked tab
+        this.classList.add('active');
+        
+        // Hide all tab content
+        document.querySelectorAll('.tab-content').forEach(content => {
+          content.classList.remove('active');
+        });
+        
+        // Show selected tab content
+        const tabName = this.getAttribute('data-tab');
+        document.getElementById(tabName + 'Tab').classList.add('active');
+      });
+    });
+  }
+  
+  /**
+   * Load deck list for admin panel
+   */
+  function loadAdminDeckList() {
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          displayAdminDeckList(result.decks);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .getAvailableDecks(false);
+  }
+  
+  /**
+   * Display deck list in admin panel
+   * 
+   * @param {Array} decks - List of deck names
+   */
+  function displayAdminDeckList(decks) {
+    const deckListElement = document.getElementById('deckList');
+    
+    if (!deckListElement) {
+      return;
+    }
+    
+    let html = '';
+    
+    // Filter out system sheets
+    const systemSheets = ['Config', 'Classes'];
+    const userDecks = decks.filter(deck => !systemSheets.includes(deck));
+    
+    userDecks.forEach(deckName => {
+      html += `
+        <div class="admin-deck-item">
+          <div class="admin-deck-name">${deckName}</div>
+          <div class="admin-deck-actions">
+            <button class="btn btn-outline btn-sm" data-action="edit" data-deck="${deckName}">Edit</button>
+            <button class="btn btn-outline btn-sm" data-action="delete" data-deck="${deckName}">Delete</button>
+          </div>
+        </div>
+      `;
+    });
+    
+    if (userDecks.length === 0) {
+      html = '<p>No decks found. Create a new deck to get started.</p>';
+    }
+    
+    deckListElement.innerHTML = html;
+    
+    // Add event listeners to action buttons
+    document.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const deckName = this.getAttribute('data-deck');
+        showDeckEditor(deckName);
+      });
+    });
+    
+    document.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const deckName = this.getAttribute('data-deck');
+        deleteDeck(deckName);
+      });
+    });
+    
+    // Add event listener to create deck button
+    const createDeckBtn = document.getElementById('createDeckBtn');
+    if (createDeckBtn) {
+      createDeckBtn.addEventListener('click', createNewDeck);
+    }
+  }
+  
+  /**
+   * Create a new deck
+   */
+  function createNewDeck() {
+    const deckName = document.getElementById('newDeckName').value.trim();
+    
+    if (!deckName) {
+      handleError('Deck name is required');
+      return;
+    }
+    
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          showSuccess(result.message);
+          loadAdminDeckList();
+          document.getElementById('newDeckName').value = '';
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .createDeck(deckName);
+  }
+  
+  /**
+   * Delete a deck
+   * 
+   * @param {string} deckName - Name of the deck to delete
+   */
+  function deleteDeck(deckName) {
+    if (!confirm(`Are you sure you want to delete the deck "${deckName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          showSuccess(result.message);
+          loadAdminDeckList();
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .deleteDeck(deckName);
+  }
+  
+  /**
+   * Show deck editor
+   * 
+   * @param {string} deckName - Name of the deck to edit
+   */
+  function showDeckEditor(deckName) {
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          displayDeckEditor(deckName, result.cards);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .getFlashcardsForDeck(deckName);
+  }
+  
+  /**
+   * Display deck editor
+   * 
+   * @param {string} deckName - Name of the deck
+   * @param {Array} cards - Array of flashcards
+   */
+  function displayDeckEditor(deckName, cards) {
+    const contentArea = document.getElementById('decksTab');
+    
+    let html = `
+      <div class="card">
+        <div class="card-title">Editing Deck: ${deckName}</div>
+        <div class="form-actions">
+          <button id="backToDecks" class="btn btn-outline">Back to Decks</button>
+          <button id="addCardBtn" class="btn">Add New Card</button>
+        </div>
+        
+        <div id="addCardForm" style="display: none; margin-top: 20px;">
+          <h3>Add New Card</h3>
+          <div class="form-group">
+            <label for="newCardSideA" class="form-label">Side A (Question)</label>
+            <input type="text" id="newCardSideA" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="newCardSideB" class="form-label">Side B (Answer)</label>
+            <input type="text" id="newCardSideB" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="newCardSideC" class="form-label">Side C (Additional Info)</label>
+            <textarea id="newCardSideC" class="form-control" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="newCardTags" class="form-label">Tags (comma-separated)</label>
+            <input type="text" id="newCardTags" class="form-control">
+          </div>
+          <div class="form-actions">
+            <button id="submitNewCard" class="btn btn-secondary">Save Card</button>
+            <button id="cancelAddCard" class="btn btn-outline">Cancel</button>
+          </div>
+        </div>
+        
+        <div class="admin-card-list" id="cardList">
+    `;
+    
+    if (cards.length === 0) {
+      html += '<p>No cards in this deck. Add a new card to get started.</p>';
+    } else {
+      cards.forEach(card => {
+        html += `
+          <div class="admin-card-item" data-card-id="${card.id}">
+            <div class="admin-card-content">
+              <strong>Side A:</strong> ${card.sideA}<br>
+              <strong>Side B:</strong> ${card.sideB}<br>
+              ${card.sideC ? `<strong>Side C:</strong> ${card.sideC}<br>` : ''}
+              ${card.tags && card.tags.length > 0 ? `<strong>Tags:</strong> ${card.tags.join(', ')}` : ''}
+            </div>
+            <div class="admin-card-actions">
+              <button class="btn btn-outline btn-sm" data-action="edit-card" data-card-id="${card.id}">Edit</button>
+              <button class="btn btn-outline btn-sm" data-action="delete-card" data-card-id="${card.id}">Delete</button>
+              <button class="btn btn-outline btn-sm" data-action="add-dictionary" data-card-id="${card.id}">Dictionary</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+    
+    html += `
+        </div>
+      </div>
+    `;
+    
+    contentArea.innerHTML = html;
+    
+    // Store deck name for later use
+    window.currentEditingDeck = deckName;
+    
+    // Add event listeners
+    document.getElementById('backToDecks').addEventListener('click', loadAdminDeckList);
+    
+    document.getElementById('addCardBtn').addEventListener('click', function() {
+      document.getElementById('addCardForm').style.display = 'block';
+      this.style.display = 'none';
+    });
+    
+    document.getElementById('cancelAddCard').addEventListener('click', function() {
+      document.getElementById('addCardForm').style.display = 'none';
+      document.getElementById('addCardBtn').style.display = 'inline-block';
+    });
+    
+    document.getElementById('submitNewCard').addEventListener('click', function() {
+      addNewCard(deckName);
+    });
+    
+    // Add event listeners to card action buttons
+    document.querySelectorAll('[data-action="edit-card"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const cardId = this.getAttribute('data-card-id');
+        const cardElement = document.querySelector(`.admin-card-item[data-card-id="${cardId}"]`);
+        showCardEditor(cardElement, cardId, deckName);
+      });
+    });
+    
+    document.querySelectorAll('[data-action="delete-card"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const cardId = this.getAttribute('data-card-id');
+        deleteCard(cardId, deckName);
+      });
+    });
+    
+    document.querySelectorAll('[data-action="add-dictionary"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const cardId = this.getAttribute('data-card-id');
+        // Switch to dictionary tab and pre-select this card
+        document.querySelector('.admin-tab[data-tab="dictionary"]').click();
+        
+        // Find the word from the card content
+        const cardElement = document.querySelector(`.admin-card-item[data-card-id="${cardId}"]`);
+        if (cardElement) {
+          const sideAText = cardElement.textContent.split('Side A:')[1].split('Side B:')[0].trim();
+          // Extract first word (or potentially all text) for dictionary lookup
+          const wordToLookup = sideAText.split(' ')[0].replace(/[^a-zA-Z]/g, '');
+          
+          // Set the word in the dictionary lookup
+          const dictionaryWordInput = document.getElementById('dictionaryWord');
+          if (dictionaryWordInput) {
+            dictionaryWordInput.value = wordToLookup;
+            
+            // Auto select deck and card
+            const deckDropdown = document.getElementById('targetDeck');
+            if (deckDropdown) {
+              setTimeout(() => {
+                // Set timeout to ensure the dropdown is populated
+                deckDropdown.value = deckName;
+                deckDropdown.dispatchEvent(new Event('change'));
+                
+                // Select the card after deck change event
+                setTimeout(() => {
+                  const cardDropdown = document.getElementById('targetCard');
+                  if (cardDropdown) {
+                    cardDropdown.value = cardId;
+                  }
+                }, 500);
+              }, 500);
+            }
+            
+            // Trigger lookup
+            document.getElementById('lookupWordBtn').click();
+          }
+        }
+      });
+    });
+  }
+  
+  /**
+   * Add a new card to a deck
+   * 
+   * @param {string} deckName - Name of the deck
+   */
+  function addNewCard(deckName) {
+    const sideA = document.getElementById('newCardSideA').value.trim();
+    const sideB = document.getElementById('newCardSideB').value.trim();
+    const sideC = document.getElementById('newCardSideC').value.trim();
+    const tags = document.getElementById('newCardTags').value.trim();
+    
+    if (!sideA || !sideB) {
+      handleError('Side A and Side B are required');
+      return;
+    }
+    
+    showLoadingIndicator();
+    
+    const cardData = {
+      sideA: sideA,
+      sideB: sideB,
+      sideC: sideC,
+      tags: tags
+    };
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          showSuccess('Card added successfully');
+          
+          // Reset form
+          document.getElementById('newCardSideA').value = '';
+          document.getElementById('newCardSideB').value = '';
+          document.getElementById('newCardSideC').value = '';
+          document.getElementById('newCardTags').value = '';
+          
+          // Hide form
+          document.getElementById('addCardForm').style.display = 'none';
+          document.getElementById('addCardBtn').style.display = 'inline-block';
+          
+          // Reload deck editor
+          showDeckEditor(deckName);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .addFlashcard(deckName, cardData);
+  }
+  
+  /**
+   * Show card editor form
+   * 
+   * @param {Element} cardElement - The card element
+   * @param {string} cardId - ID of the card
+   * @param {string} deckName - Name of the deck
+   */
+  function showCardEditor(cardElement, cardId, deckName) {
+    // Extract card data from the element
+    const cardContent = cardElement.querySelector('.admin-card-content').textContent;
+    
+    // Parse card content
+    const sideA = cardContent.split('Side A:')[1].split('Side B:')[0].trim();
+    const sideB = cardContent.split('Side B:')[1].split('Side C:')[0].split('Tags:')[0].trim();
+    
+    let sideC = '';
+    if (cardContent.includes('Side C:')) {
+      sideC = cardContent.split('Side C:')[1].split('Tags:')[0].trim();
+    }
+    
+    let tags = '';
+    if (cardContent.includes('Tags:')) {
+      tags = cardContent.split('Tags:')[1].trim();
+    }
+    
+    // Create edit form
+    const editForm = document.createElement('div');
+    editForm.className = 'card-edit-form';
+    editForm.innerHTML = `
+      <div class="form-group">
+        <label for="editCardSideA" class="form-label">Side A (Question)</label>
+        <input type="text" id="editCardSideA" class="form-control" value="${sideA}" required>
+      </div>
+      <div class="form-group">
+        <label for="editCardSideB" class="form-label">Side B (Answer)</label>
+        <input type="text" id="editCardSideB" class="form-control" value="${sideB}" required>
+      </div>
+      <div class="form-group">
+        <label for="editCardSideC" class="form-label">Side C (Additional Info)</label>
+        <textarea id="editCardSideC" class="form-control" rows="3">${sideC}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="editCardTags" class="form-label">Tags (comma-separated)</label>
+        <input type="text" id="editCardTags" class="form-control" value="${tags}">
+      </div>
+      <div class="form-actions">
+        <button id="saveEditCard" class="btn btn-secondary">Save Changes</button>
+        <button id="cancelEditCard" class="btn btn-outline">Cancel</button>
+      </div>
+    `;
+    
+    // Replace card content with edit form
+    const originalContent = cardElement.innerHTML;
+    cardElement.innerHTML = '';
+    cardElement.appendChild(editForm);
+    
+    // Add event listeners
+    document.getElementById('saveEditCard').addEventListener('click', function() {
+      updateCard(cardId, deckName);
+    });
+    
+    document.getElementById('cancelEditCard').addEventListener('click', function() {
+      // Restore original content
+      cardElement.innerHTML = originalContent;
+      
+      // Re-add event listeners
+      cardElement.querySelector('[data-action="edit-card"]').addEventListener('click', function() {
+        showCardEditor(cardElement, cardId, deckName);
+      });
+      
+      cardElement.querySelector('[data-action="delete-card"]').addEventListener('click', function() {
+        deleteCard(cardId, deckName);
+      });
+      
+      cardElement.querySelector('[data-action="add-dictionary"]').addEventListener('click', function() {
+        // Dictionary functionality
+        document.querySelector('.admin-tab[data-tab="dictionary"]').click();
+      });
+    });
+  }
+  
+  /**
+   * Update a card
+   * 
+   * @param {string} cardId - ID of the card
+   * @param {string} deckName - Name of the deck
+   */
+  function updateCard(cardId, deckName) {
+    const sideA = document.getElementById('editCardSideA').value.trim();
+    const sideB = document.getElementById('editCardSideB').value.trim();
+    const sideC = document.getElementById('editCardSideC').value.trim();
+    const tags = document.getElementById('editCardTags').value.trim();
+    
+    if (!sideA || !sideB) {
+      handleError('Side A and Side B are required');
+      return;
+    }
+    
+    showLoadingIndicator();
+    
+    const cardData = {
+      sideA: sideA,
+      sideB: sideB,
+      sideC: sideC,
+      tags: tags
+    };
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          showSuccess('Card updated successfully');
+          
+          // Reload deck editor
+          showDeckEditor(deckName);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .updateFlashcard(deckName, cardId, cardData);
+  }
+  
+  /**
+   * Delete a card
+   * 
+   * @param {string} cardId - ID of the card
+   * @param {string} deckName - Name of the deck
+   */
+  function deleteCard(cardId, deckName) {
+    if (!confirm('Are you sure you want to delete this card? This action cannot be undone.')) {
+      return;
+    }
+    
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          showSuccess('Card deleted successfully');
+          
+          // Reload deck editor
+          showDeckEditor(deckName);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .deleteFlashcard(deckName, cardId);
+  }
+  
+  /**
+   * Load user list
+   */
+  function loadUserList() {
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        if (result.success) {
+          displayUserList(result.users);
+        } else {
+          handleError(result.message);
+        }
+        
+        hideLoadingIndicator();
+      })
+      .withFailureHandler(handleError)
+      .getUsers();
+  }
+  
+  /**
+   * Display user list
+   * 
+   * @param {Array} users - Array of user objects
+   */
+  function displayUserList(users) {
+    const userListElement = document.getElementById('userList');
+    
+    if (!userListElement) {
+      return;
+    }
+    
+    const tableBody = userListElement.querySelector('tbody');
+    
+    if (!tableBody) {
+      return;
+    }
+    
+    let html = '';
+    
+    users.forEach(user => {
+      html += `
+        <tr>
+          <td>${user.StudentFirst} ${user.StudentLast}</td>
+          <td>${user.UserName}</td>
+          <td>${user.IsAdmin === 'TRUE' || user.IsAdmin === true ? 'Admin' : 'Student'}</td>
+          <td>${user.LastLogin ? new Date(user.LastLogin).toLocaleString() : 'Never'}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" data-action="view-progress" data-username="${user.UserName}">Progress</button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    tableBody.innerHTML = html;
+    
+    // Add event listeners
+    document.querySelectorAll('[data-action="view-progress"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const username = this.getAttribute('data-username');
+        // TODO: Implement view progress functionality
+        alert('View progress for ' + username + ' (not implemented yet)');
+      });
+    });
+  }
+</script>
