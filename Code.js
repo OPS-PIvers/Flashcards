@@ -11,14 +11,13 @@ function doGet(e) {
   
   // Get user session info if available
   const userSession = getUserSession();
-  const isLoggedIn = Boolean(userSession && userSession.isValid && userSession.userName);
   
   // Prepare template data
   const templateData = {
     title: 'Flashcard App',
-    isLoggedIn: isLoggedIn,
-    isAdmin: isLoggedIn && userSession.isAdmin,
-    userName: isLoggedIn ? userSession.userName : '',
+    isLoggedIn: userSession && userSession.isValid,
+    isAdmin: userSession && userSession.isAdmin,
+    userName: userSession ? userSession.userName : '',
     page: page
   };
   

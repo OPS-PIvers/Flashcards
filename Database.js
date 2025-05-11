@@ -158,36 +158,7 @@ function getDatabaseSpreadsheet() {
  */
 function getAvailableDecks(excludeSystemSheets = true) {
   try {
-    // Check if app is initialized
-    if (!isAppInitialized()) {
-      return {
-        success: false,
-        message: 'App not initialized',
-        decks: []
-      };
-    }
-    
-    const databaseId = getScriptProperty('databaseId');
-    let ss;
-    
-    try {
-      ss = SpreadsheetApp.openById(databaseId);
-    } catch (e) {
-      return {
-        success: false,
-        message: `Could not open database: ${e.message}`,
-        decks: []
-      };
-    }
-    
-    if (!ss) {
-      return {
-        success: false,
-        message: 'Database spreadsheet not found',
-        decks: []
-      };
-    }
-    
+    const ss = getDatabaseSpreadsheet();
     const sheets = ss.getSheets();
     const systemSheets = ['Config', 'Classes'];
     
@@ -200,12 +171,8 @@ function getAvailableDecks(excludeSystemSheets = true) {
       decks: decks
     };
   } catch (error) {
-    Logger.log(`Error getting available decks: ${error.message}`);
-    return { 
-      success: false, 
-      message: `Error getting available decks: ${error.message}`,
-      decks: [] 
-    };
+    Logger.log('Error getting available decks: ' + error.message);
+    return { success: false, message: 'Error getting available decks: ' + error.message };
   }
 }
 

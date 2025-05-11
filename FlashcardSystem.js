@@ -1,343 +1,356 @@
 /**
- * Load a specific deck
+ * Gets all flashcards for a specific deck
  * 
- * @param {string} deckName - Name of the deck to load
+ * @param {string} deckName - Name of the deck
+ * @return {Object} Object containing deck info and cards
  */
-function loadDeck(deckName) {
-  if (!deckName) {
-    handleError('Deck name is missing');
-    return;
+function getFlashcardsForDeck(deckName) {
+  try {
+    // Validate that deck exists
+    const decksResult = getAvailableDecks();
+    if (!decksResult.success) {
+      return decksResult;
+    }
+    
+    if (!decksResult.decks.includes(deckName)) {
+      return { 
+        success: false, 
+        message: `Deck "${deckName}" not found` 
+      };
+    }
+    
+    // Get the current user
+    const user = getCurrentUserInfo();
+    if (!user) {
+      return { 
+        success: false, 
+        message: 'User not logged in' 
+      };
+    }
+    
+    // Get the flashcards
+    const cards = getDeckFlashcards(deckName);
+    
+    // Get the user's progress data for this deck
+    const userProgress = getUserDeckProgress(user.userName, deckName);
+    
+    // Combine flashcards with user progress and schedule cards
+    const processedCards = processCardsWithProgress(cards, userProgress);
+    
+    return {
+      success: true,
+      deckName: deckName,
+      cards: processedCards,
+      totalCards: cards.length,
+      dueCards: processedCards.filter(card => card.isDue).length
+    };
+  } catch (error) {
+    Logger.log('Error getting flashcards: ' + error.message);
+    return { success: false, message: 'Error getting flashcards: ' + error.message };
   }
-  
-  showLoadingIndicator();
-  
-  google.script.run
-    .withSuccessHandler(function(result) {
-      // Defensive null check
-      if (!result) {
-        handleError('Server returned an empty response');
-        hideLoadingIndicator();
-        return;
-      }
-      
-      if (result.success) {
-        // Store deck data with fallbacks for missing properties
-        window.app.currentDeck = deckName;
-        window.app.currentCards = result.cards || [];
-        window.app.currentCardIndex = 0;
-        
-        // Show the flashcard view
-        displayFlashcardView(result);
-      } else {
-        if (result.message === 'User not logged in') {
-          // Redirect to login for authentication issues
-          showLoginForm();
-          showError('Please log in to view this deck');
-        } else {
-          handleError(result.message || 'Unknown error loading deck');
-        }
-      }
-      
-      hideLoadingIndicator();
-    })
-    .withFailureHandler(function(error) {
-      handleError('Error loading deck: ' + (error ? error.toString() : 'Unknown error'));
-      hideLoadingIndicator();
-    })
-    .getFlashcardsForDeck(deckName);
 }
 
 /**
- * Display the flashcard study view
+ * Gets user progress data for a specific deck
  * 
- * @param {Object} deckData - The deck data with cards
+ * @param {string} username - Username
+ * @param {string} deckName - Name of the deck
+ * @return {Object} Progress data keyed by card ID
  */
-function displayFlashcardView(deckData) {
-  if (!deckData) {
-    handleError('No deck data available');
-    return;
+function getUserDeckProgress(username, deckName) {
+  const ss = getDatabaseSpreadsheet();
+  const deckSheet = ss.getSheetByName(deckName);
+  
+  if (!deckSheet) {
+    throw new Error(`Deck "${deckName}" not found`);
   }
   
-  const contentArea = document.getElementById('appContent');
-  if (!contentArea) {
-    handleError('Content area not found');
-    return;
+  const data = deckSheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find column indices
+  const idIndex = headers.indexOf('FlashcardID');
+  const userColIndex = headers.findIndex(col => col === username + '_Rating');
+  const userDateIndex = headers.findIndex(col => col === username + '_LastReview');
+  const userDueIndex = headers.findIndex(col => col === username + '_NextDue');
+  
+  // If user columns don't exist yet, create them
+  if (userColIndex === -1 || userDateIndex === -1 || userDueIndex === -1) {
+    return addUserColumnsToSheet(deckSheet, username, headers);
   }
   
-  // Ensure cards array exists
-  const cards = deckData.cards || [];
+  // Process existing progress data
+  const progressData = {};
   
-  // Filter for due cards
-  const dueCards = Array.isArray(cards) ? cards.filter(card => card && card.isDue) : [];
-  
-  // Check if there are any due cards
-  if (dueCards.length === 0) {
-    contentArea.innerHTML = `
-      <div class="card">
-        <div class="card-title">Great job!</div>
-        <p>You have no cards due in "${deckData.deckName || 'this deck'}" right now.</p>
-        <div class="form-actions" style="margin-top: 20px;">
-          <button id="backToDeckList" class="btn">Back to Decks</button>
-          <button id="studyAnyway" class="btn btn-outline">Study Anyway</button>
-        </div>
-      </div>
-    `;
+  for (let i = 1; i < data.length; i++) {
+    const cardId = data[i][idIndex];
+    const rating = data[i][userColIndex] || 0;
+    const lastReview = data[i][userDateIndex] ? new Date(data[i][userDateIndex]) : null;
+    const nextDue = data[i][userDueIndex] ? new Date(data[i][userDueIndex]) : null;
     
-    // Add event listeners
-    const backBtn = document.getElementById('backToDeckList');
-    if (backBtn) {
-      backBtn.addEventListener('click', loadDeckList);
-    }
-    
-    const studyBtn = document.getElementById('studyAnyway');
-    if (studyBtn) {
-      studyBtn.addEventListener('click', function() {
-        if (Array.isArray(cards) && cards.length > 0) {
-          displayFlashcard(cards, 0);
-        } else {
-          handleError('No cards available in this deck');
-          loadDeckList();
-        }
-      });
-    }
-    
-    return;
+    progressData[cardId] = {
+      rating: rating,
+      lastReview: lastReview,
+      nextDue: nextDue,
+      interval: calculateInterval(rating)
+    };
   }
   
-  // Display the first due card
-  displayFlashcard(dueCards, 0);
+  return progressData;
 }
 
 /**
- * Display a specific flashcard
+ * Adds user-specific columns to a deck sheet
  * 
- * @param {Array} cards - Array of cards
- * @param {number} index - Index of the card to display
+ * @param {Sheet} deckSheet - The deck sheet
+ * @param {string} username - Username
+ * @param {Array} headers - Existing headers
+ * @return {Object} Empty progress data
  */
-function displayFlashcard(cards, index) {
-  // Validate parameters
-  if (!Array.isArray(cards)) {
-    handleError('Invalid cards data');
-    return;
-  }
+function addUserColumnsToSheet(deckSheet, username, headers) {
+  // Determine the last column
+  const lastCol = headers.length + 1;
   
-  if (index < 0 || index >= cards.length) {
-    // End of deck reached or invalid index
-    showDeckComplete();
-    return;
-  }
+  // Add new headers
+  deckSheet.getRange(1, lastCol, 1, 3).setValues([[
+    username + '_Rating',
+    username + '_LastReview',
+    username + '_NextDue'
+  ]]);
   
-  const card = cards[index];
-  if (!card) {
-    handleError('Card data is missing');
-    return;
-  }
+  // Return empty progress data
+  return {};
+}
+
+/**
+ * Calculates the interval for spaced repetition based on rating
+ * 
+ * @param {number} rating - The rating (0-3)
+ * @return {number} Interval in days
+ */
+function calculateInterval(rating) {
+  // Simple interval calculation:
+  // 0 (Again): 1 day
+  // 1 (Hard): 3 days
+  // 2 (Good): 7 days
+  // 3 (Easy): 14 days
+  const intervals = [1, 3, 7, 14];
+  return intervals[rating] || 1;
+}
+
+/**
+ * Processes cards with user progress data
+ * 
+ * @param {Array} cards - Array of flashcard objects
+ * @param {Object} progressData - User progress data
+ * @return {Array} Processed cards with progress info
+ */
+function processCardsWithProgress(cards, progressData) {
+  const now = new Date();
   
-  const contentArea = document.getElementById('appContent');
-  if (!contentArea) {
-    handleError('Content area not found');
-    return;
-  }
-  
-  // Process dictionary content in sideC if present
-  let sideCContent = card.sideC || '';
-  
-  contentArea.innerHTML = `
-    <div class="flashcard-container">
-      <div class="deck-info">
-        <h2>${window.app.currentDeck || 'Flashcard Deck'}</h2>
-        <div class="progress">Card ${index + 1} of ${cards.length}</div>
-      </div>
-      
-      <div class="flashcard" id="currentCard">
-        <div class="flashcard-front">
-          <div class="flashcard-content">${card.sideA || 'Question'}</div>
-          <div class="flashcard-helper">Click to flip</div>
-        </div>
-        <div class="flashcard-back">
-          <div class="flashcard-content">${card.sideB || 'Answer'}</div>
-          <div class="flashcard-secondary">${sideCContent}</div>
-        </div>
-      </div>
-      
-      <div class="rating-buttons" style="display: none;" id="ratingButtons">
-        <button class="rating-btn rating-btn-again" data-rating="0">
-          <span class="material-icons">sentiment_very_dissatisfied</span>
-          <span>Again</span>
-        </button>
-        <button class="rating-btn rating-btn-hard" data-rating="1">
-          <span class="material-icons">sentiment_dissatisfied</span>
-          <span>Hard</span>
-        </button>
-        <button class="rating-btn rating-btn-good" data-rating="2">
-          <span class="material-icons">sentiment_satisfied</span>
-          <span>Good</span>
-        </button>
-        <button class="rating-btn rating-btn-easy" data-rating="3">
-          <span class="material-icons">sentiment_very_satisfied</span>
-          <span>Easy</span>
-        </button>
-      </div>
-      
-      <div class="flashcard-controls">
-        <button id="backToDeckList" class="btn btn-outline">Back to Decks</button>
-      </div>
-    </div>
-  `;
-  
-  // If card has dictionary content, process it
-  if (card.sideC && (card.sideC.includes('[AUDIO:') || card.sideC.includes('[IMAGE:'))) {
-    google.script.run
-      .withSuccessHandler(function(processedContent) {
-        if (processedContent) {
-          // Update the card back with processed content
-          const secondaryContent = document.querySelector('.flashcard-back .flashcard-secondary');
-          if (secondaryContent) {
-            secondaryContent.innerHTML = processedContent;
-          }
-        }
-      })
-      .withFailureHandler(function(error) {
-        // Continue without processed content if there's an error
-        console.error('Error processing dictionary content:', error);
-      })
-      .renderDictionaryContent(card.sideC);
-  }
-  
-  // Add event listeners
-  const flashcard = document.getElementById('currentCard');
-  if (flashcard) {
-    flashcard.addEventListener('click', function() {
-      this.classList.toggle('flipped');
-      
-      // Show rating buttons when card is flipped to back
-      const ratingButtons = document.getElementById('ratingButtons');
-      if (ratingButtons) {
-        ratingButtons.style.display = this.classList.contains('flipped') ? 'flex' : 'none';
-      }
-    });
-  }
-  
-  // Rating buttons
-  document.querySelectorAll('.rating-btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      if (e) e.stopPropagation(); // Prevent card from flipping back
-      
-      const rating = parseInt(this.getAttribute('data-rating') || '0');
-      if (card && card.id) {
-        rateCard(card.id, rating, cards, index);
-      } else {
-        handleError('Card data is incomplete');
-      }
-    });
+  return cards.map(card => {
+    const progress = progressData[card.id] || {
+      rating: 0,
+      lastReview: null,
+      nextDue: null,
+      interval: 1
+    };
+    
+    // Determine if card is due
+    const isDue = !progress.nextDue || progress.nextDue <= now;
+    
+    return {
+      ...card,
+      rating: progress.rating,
+      lastReview: progress.lastReview,
+      nextDue: progress.nextDue,
+      interval: progress.interval,
+      isDue: isDue
+    };
   });
-  
-  // Back button
-  const backButton = document.getElementById('backToDeckList');
-  if (backButton) {
-    backButton.addEventListener('click', loadDeckList);
-  }
 }
 
 /**
- * Rate a flashcard and move to the next one
+ * Records a user's rating for a card
  * 
- * @param {string} cardId - ID of the card
- * @param {number} rating - Rating value (0-3)
- * @param {Array} cards - Array of cards
- * @param {number} index - Current card index
+ * @param {string} deckName - Name of the deck
+ * @param {string} cardId - ID of the flashcard
+ * @param {number} rating - Rating (0-3)
+ * @return {Object} Result of the operation
  */
-function rateCard(cardId, rating, cards, index) {
-  if (!cardId) {
-    handleError('Card ID is missing');
-    return;
+function recordCardRating(deckName, cardId, rating) {
+  try {
+    // Validate rating
+    if (rating < 0 || rating > 3) {
+      return { success: false, message: 'Invalid rating value' };
+    }
+    
+    // Get the current user
+    const user = getCurrentUserInfo();
+    if (!user) {
+      return { success: false, message: 'User not logged in' };
+    }
+    
+    const ss = getDatabaseSpreadsheet();
+    const deckSheet = ss.getSheetByName(deckName);
+    
+    if (!deckSheet) {
+      return { success: false, message: `Deck "${deckName}" not found` };
+    }
+    
+    const data = deckSheet.getDataRange().getValues();
+    const headers = data[0];
+    
+    // Find column indices
+    const idIndex = headers.indexOf('FlashcardID');
+    let userRatingIndex = headers.indexOf(user.userName + '_Rating');
+    let userDateIndex = headers.indexOf(user.userName + '_LastReview');
+    let userDueIndex = headers.indexOf(user.userName + '_NextDue');
+    
+    // If user columns don't exist, add them
+    if (userRatingIndex === -1 || userDateIndex === -1 || userDueIndex === -1) {
+      const lastCol = headers.length;
+      
+      // Add new headers
+      deckSheet.getRange(1, lastCol + 1, 1, 3).setValues([[
+        user.userName + '_Rating',
+        user.userName + '_LastReview',
+        user.userName + '_NextDue'
+      ]]);
+      
+      // Update headers array and indices
+      headers.push(user.userName + '_Rating', user.userName + '_LastReview', user.userName + '_NextDue');
+      userRatingIndex = headers.indexOf(user.userName + '_Rating');
+      userDateIndex = headers.indexOf(user.userName + '_LastReview');
+      userDueIndex = headers.indexOf(user.userName + '_NextDue');
+    }
+    
+    // Find the card row
+    let cardRow = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === cardId) {
+        cardRow = i;
+        break;
+      }
+    }
+    
+    if (cardRow === -1) {
+      return { success: false, message: `Card "${cardId}" not found in deck` };
+    }
+    
+    // Calculate the new interval and next due date
+    const interval = calculateInterval(rating);
+    const now = new Date();
+    const nextDue = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
+    
+    // Update the sheet
+    deckSheet.getRange(cardRow + 1, userRatingIndex + 1).setValue(rating);
+    deckSheet.getRange(cardRow + 1, userDateIndex + 1).setValue(now);
+    deckSheet.getRange(cardRow + 1, userDueIndex + 1).setValue(nextDue);
+    
+    return {
+      success: true,
+      message: 'Rating recorded successfully',
+      nextDue: nextDue,
+      interval: interval
+    };
+  } catch (error) {
+    Logger.log('Error recording card rating: ' + error.message);
+    return { success: false, message: 'Error recording card rating: ' + error.message };
   }
-  
-  if (rating < 0 || rating > 3) {
-    handleError('Invalid rating value');
-    return;
-  }
-  
-  showLoadingIndicator();
-  
-  google.script.run
-    .withSuccessHandler(function(result) {
-      if (!result) {
-        handleError('Server returned an empty response when rating card');
-        hideLoadingIndicator();
-        return;
-      }
-      
-      if (result.success) {
-        // Move to the next card
-        if (Array.isArray(cards) && index + 1 < cards.length) {
-          displayFlashcard(cards, index + 1);
-        } else {
-          showDeckComplete();
-        }
-      } else {
-        handleError(result.message || 'Failed to record card rating');
-        
-        // Try to continue anyway to next card
-        if (Array.isArray(cards) && index + 1 < cards.length) {
-          displayFlashcard(cards, index + 1);
-        } else {
-          showDeckComplete();
-        }
-      }
-      
-      hideLoadingIndicator();
-    })
-    .withFailureHandler(function(error) {
-      handleError('Error rating card: ' + (error ? error.toString() : 'Unknown error'));
-      hideLoadingIndicator();
-      
-      // Try to continue anyway
-      if (Array.isArray(cards) && index + 1 < cards.length) {
-        displayFlashcard(cards, index + 1);
-      } else {
-        showDeckComplete();
-      }
-    })
-    .recordCardRating(window.app.currentDeck, cardId, rating);
 }
 
 /**
- * Show deck completion screen
+ * Gets due cards for a user across all decks
+ * 
+ * @return {Object} Due cards by deck
  */
-function showDeckComplete() {
-  const contentArea = document.getElementById('appContent');
-  if (!contentArea) {
-    handleError('Content area not found');
-    return;
-  }
-  
-  contentArea.innerHTML = `
-    <div class="card">
-      <div class="card-title">Well done!</div>
-      <p>You have completed studying this deck.</p>
-      <div class="form-actions" style="margin-top: 20px;">
-        <button id="backToDeckList" class="btn">Back to Decks</button>
-        <button id="restartDeck" class="btn btn-outline">Study Again</button>
-      </div>
-    </div>
-  `;
-  
-  // Add event listeners
-  const backButton = document.getElementById('backToDeckList');
-  if (backButton) {
-    backButton.addEventListener('click', loadDeckList);
-  }
-  
-  const restartButton = document.getElementById('restartDeck');
-  if (restartButton) {
-    restartButton.addEventListener('click', function() {
-      if (window.app.currentDeck) {
-        loadDeck(window.app.currentDeck);
-      } else {
-        handleError('Current deck information is missing');
-        loadDeckList();
+function getUserDueCards() {
+  try {
+    // Get the current user
+    const user = getCurrentUserInfo();
+    if (!user) {
+      return { success: false, message: 'User not logged in' };
+    }
+    
+    // Get all available decks
+    const decksResult = getAvailableDecks();
+    if (!decksResult.success) {
+      return decksResult;
+    }
+    
+    const dueCardsByDeck = {};
+    
+    // Process each deck
+    decksResult.decks.forEach(deckName => {
+      const result = getFlashcardsForDeck(deckName);
+      if (result.success) {
+        dueCardsByDeck[deckName] = {
+          totalCards: result.totalCards,
+          dueCards: result.dueCards
+        };
       }
     });
+    
+    return {
+      success: true,
+      decks: decksResult.decks,
+      dueCardsByDeck: dueCardsByDeck
+    };
+  } catch (error) {
+    Logger.log('Error getting due cards: ' + error.message);
+    return { success: false, message: 'Error getting due cards: ' + error.message };
+  }
+}
+
+/**
+ * Resets a user's progress for a deck
+ * 
+ * @param {string} deckName - Name of the deck
+ * @return {Object} Result of the operation
+ */
+function resetDeckProgress(deckName) {
+  try {
+    // Get the current user
+    const user = getCurrentUserInfo();
+    if (!user) {
+      return { success: false, message: 'User not logged in' };
+    }
+    
+    const ss = getDatabaseSpreadsheet();
+    const deckSheet = ss.getSheetByName(deckName);
+    
+    if (!deckSheet) {
+      return { success: false, message: `Deck "${deckName}" not found` };
+    }
+    
+    const data = deckSheet.getDataRange().getValues();
+    const headers = data[0];
+    
+    // Find column indices
+    const userRatingIndex = headers.indexOf(user.userName + '_Rating');
+    const userDateIndex = headers.indexOf(user.userName + '_LastReview');
+    const userDueIndex = headers.indexOf(user.userName + '_NextDue');
+    
+    // If user columns don't exist, nothing to reset
+    if (userRatingIndex === -1 || userDateIndex === -1 || userDueIndex === -1) {
+      return { success: true, message: 'No progress data to reset' };
+    }
+    
+    // Clear the user columns
+    const numRows = deckSheet.getLastRow() - 1;  // Excluding header
+    if (numRows > 0) {
+      deckSheet.getRange(2, userRatingIndex + 1, numRows, 1).clearContent();
+      deckSheet.getRange(2, userDateIndex + 1, numRows, 1).clearContent();
+      deckSheet.getRange(2, userDueIndex + 1, numRows, 1).clearContent();
+    }
+    
+    return {
+      success: true,
+      message: 'Deck progress reset successfully'
+    };
+  } catch (error) {
+    Logger.log('Error resetting deck progress: ' + error.message);
+    return { success: false, message: 'Error resetting deck progress: ' + error.message };
   }
 }
