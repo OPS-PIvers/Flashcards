@@ -12,9 +12,11 @@
  *                  augmented with progress fields: rating, lastReview, nextDue, interval, isDue.
  */
 function getFlashcardsForDeck(deckName) {
+  const user = getCurrentUserInfo(); // Get user info once at the beginning
+
   try {
-    const user = getCurrentUserInfo(); // Assumes getCurrentUserInfo from Authentication.js
     if (!user) {
+      // This path returns a valid object, so it's not the cause of a 'null' server response
       return { success: false, message: 'User not logged in. Please log in to study decks.' };
     }
 
@@ -34,12 +36,21 @@ function getFlashcardsForDeck(deckName) {
       dueCards: processedCards.filter(card => card.isDue).length
     };
   } catch (error) {
-    Logger.log(`Error in getFlashcardsForDeck (Deck: ${deckName}, User: ${getCurrentUserInfo() ? getCurrentUserInfo().userName : 'N/A'}): ${error.message}\nStack: ${error.stack}`);
-    // Provide a more user-friendly message if it's a known "deck not found" type error
-    if (error.message && error.message.toLowerCase().includes("not found")) {
+    // Construct a safe log message
+    // Use the 'user' variable captured at the start of the function for userNameForLog.
+    const userNameForLog = user ? user.userName : 'N/A (user object was null at function start or became null)';
+    const errorMessageForLog = (error && typeof error.message === 'string') ? error.message : String(error); // Ensure error.message is a string
+    const errorStackForLog = (error && typeof error.stack === 'string') ? error.stack : 'No stack available';
+    
+    Logger.log(`Error in getFlashcardsForDeck (Deck: ${deckName}, User: ${userNameForLog}): ${errorMessageForLog}\nStack: ${errorStackForLog}`);
+
+    // Safe check for error.message's content
+    if (errorMessageForLog.toLowerCase().includes("not found")) {
         return { success: false, message: `Could not load deck "${deckName}". It might not exist or there was an issue accessing it.` };
     }
-    return { success: false, message: `Server error getting flashcards for deck "${deckName}": ${error.message}` };
+    
+    // Default error return
+    return { success: false, message: `Server error getting flashcards for deck "${deckName}": ${errorMessageForLog}` };
   }
 }
 
@@ -171,6 +182,7 @@ function processCardsWithProgress(rawCards, userProgress) {
     
     return {
       ...card, // Spread all properties from the raw card object
+      id: card.FlashcardID, // Ensure 'id' property is explicitly set for client-side if needed
       rating: progress.rating,
       lastReview: progress.lastReview,
       nextDue: progress.nextDue,
