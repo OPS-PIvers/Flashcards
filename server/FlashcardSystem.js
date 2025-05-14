@@ -12,44 +12,64 @@
  *                  augmented with progress fields: rating, lastReview, nextDue, interval, isDue.
  */
 function getFlashcardsForDeck(deckName) {
-  const user = getCurrentUserInfo(); // Get user info once at the beginning
+  const user = getCurrentUserInfo(); 
 
   try {
+    // Logger.log(`getFlashcardsForDeck: Entry for deck "${deckName}". User object: ${JSON.stringify(user)}`); // Can be verbose
+
     if (!user) {
-      // This path returns a valid object, so it's not the cause of a 'null' server response
+      Logger.log(`getFlashcardsForDeck: User not logged in when trying to access deck "${deckName}".`);
       return { success: false, message: 'User not logged in. Please log in to study decks.' };
     }
 
-    // getDeckFlashcards (from Database.js) now returns full card objects or throws an error.
-    // It also handles deck existence checks.
+    Logger.log(`getFlashcardsForDeck: Starting for deck "${deckName}", user "${user.userName}".`);
+
     const rawCards = getDeckFlashcards(deckName);
+    Logger.log(`getFlashcardsForDeck: Call to getDeckFlashcards completed. Received ${rawCards ? rawCards.length : 'null/undefined'} raw cards for deck "${deckName}".`);
+    
+    if (!rawCards) { 
+        Logger.log(`getFlashcardsForDeck: CRITICAL - getDeckFlashcards returned null or undefined for deck "${deckName}".`);
+        return { success: false, message: `Failed to retrieve card data for deck "${deckName}" (internal error: rawCards was null/undefined).`};
+    }
 
     const userProgress = getUserDeckProgress(user.userName, deckName, rawCards.map(c => c.FlashcardID));
-
+    Logger.log(`getFlashcardsForDeck: Call to getUserDeckProgress completed. Received progress for ${userProgress ? Object.keys(userProgress).length : 'null/undefined'} cards for deck "${deckName}".`);
+    
+    if (!userProgress) { 
+        Logger.log(`getFlashcardsForDeck: CRITICAL - getUserDeckProgress returned null or undefined for deck "${deckName}".`);
+        return { success: false, message: `Failed to retrieve user progress for deck "${deckName}" (internal error: userProgress was null/undefined).`};
+    }
+    
     const processedCards = processCardsWithProgress(rawCards, userProgress);
+    Logger.log(`getFlashcardsForDeck: Call to processCardsWithProgress completed. Processed ${processedCards ? processedCards.length : 'null/undefined'} cards for deck "${deckName}".`);
+    
+    if (!processedCards) { 
+        Logger.log(`getFlashcardsForDeck: CRITICAL - processCardsWithProgress returned null or undefined for deck "${deckName}".`);
+        return { success: false, message: `Failed to process card data for deck "${deckName}" (internal error: processedCards was null/undefined).`};
+    }
 
-    return {
+    const result = {
       success: true,
       deckName: deckName,
-      cards: processedCards, // These are full card objects with progress
+      cards: processedCards,
       totalCards: processedCards.length,
       dueCards: processedCards.filter(card => card.isDue).length
     };
+    
+    Logger.log(`getFlashcardsForDeck: Successfully prepared result for deck "${deckName}". Total cards: ${result.totalCards}, Due: ${result.dueCards}. Returning success.`);
+    return result;
+
   } catch (error) {
-    // Construct a safe log message
-    // Use the 'user' variable captured at the start of the function for userNameForLog.
-    const userNameForLog = user ? user.userName : 'N/A (user object was null at function start or became null)';
-    const errorMessageForLog = (error && typeof error.message === 'string') ? error.message : String(error); // Ensure error.message is a string
+    const userNameForLog = user ? user.userName : 'N/A (user object was null or became null at function start)';
+    const errorMessageForLog = (error && typeof error.message === 'string') ? error.message : String(error); 
     const errorStackForLog = (error && typeof error.stack === 'string') ? error.stack : 'No stack available';
     
     Logger.log(`Error in getFlashcardsForDeck (Deck: ${deckName}, User: ${userNameForLog}): ${errorMessageForLog}\nStack: ${errorStackForLog}`);
 
-    // Safe check for error.message's content
     if (errorMessageForLog.toLowerCase().includes("not found")) {
         return { success: false, message: `Could not load deck "${deckName}". It might not exist or there was an issue accessing it.` };
     }
     
-    // Default error return
     return { success: false, message: `Server error getting flashcards for deck "${deckName}": ${errorMessageForLog}` };
   }
 }
@@ -69,7 +89,6 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
   const deckSheet = ss.getSheetByName(deckName);
 
   if (!deckSheet) {
-    // This case should ideally be caught by getDeckFlashcards before this function is called.
     Logger.log(`CRITICAL: Deck sheet "${deckName}" not found in getUserDeckProgress.`);
     throw new Error(`Deck sheet "${deckName}" not found while trying to get user progress.`);
   }
@@ -92,7 +111,6 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
   let lastReviewColIndex = headers.indexOf(userLastReviewCol);
   let nextDueColIndex = headers.indexOf(userNextDueCol);
 
-  // If user-specific columns don't exist, add them
   if (ratingColIndex === -1 || lastReviewColIndex === -1 || nextDueColIndex === -1) {
     const lastHeaderColumn = headers.length;
     const newHeaders = [];
@@ -102,7 +120,6 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
 
     if (newHeaders.length > 0) {
         deckSheet.getRange(1, lastHeaderColumn + 1, 1, newHeaders.length).setValues([newHeaders]).setFontWeight('bold');
-        // Refresh headers and indices
         const updatedHeaders = deckSheet.getRange(1, 1, 1, deckSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
         ratingColIndex = updatedHeaders.indexOf(userRatingCol);
         lastReviewColIndex = updatedHeaders.indexOf(userLastReviewCol);
@@ -112,19 +129,15 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
   }
 
   const progressData = {};
-  // Initialize progress for all cards in the deck, ensuring every card has an entry
   cardIdsInDeck.forEach(id => {
       progressData[id] = { rating: 0, lastReview: null, nextDue: null, interval: 1 };
   });
 
-
-  // Populate progressData from sheet values
-  // Start from row 1 (data[1]) as row 0 is headers
   for (let i = 1; i < allSheetData.length; i++) {
     const row = allSheetData[i];
     const cardId = row[cardIdColIndex];
 
-    if (cardId && progressData.hasOwnProperty(cardId)) { // Ensure cardId from sheet is one we care about
+    if (cardId && progressData.hasOwnProperty(cardId)) { 
       const rating = (ratingColIndex !== -1 && row[ratingColIndex] !== '') ? parseInt(row[ratingColIndex], 10) : 0;
       const lastReview = (lastReviewColIndex !== -1 && row[lastReviewColIndex]) ? new Date(row[lastReviewColIndex]) : null;
       const nextDue = (nextDueColIndex !== -1 && row[nextDueColIndex]) ? new Date(row[nextDueColIndex]) : null;
@@ -133,7 +146,7 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
         rating: isNaN(rating) ? 0 : rating,
         lastReview: (lastReview && !isNaN(lastReview.getTime())) ? lastReview : null,
         nextDue: (nextDue && !isNaN(nextDue.getTime())) ? nextDue : null,
-        interval: calculateInterval(isNaN(rating) ? 0 : rating) // Use current rating to calc interval
+        interval: calculateInterval(isNaN(rating) ? 0 : rating) 
       };
     }
   }
@@ -148,10 +161,8 @@ function getUserDeckProgress(username, deckName, cardIdsInDeck) {
  * @return {number} Interval in days
  */
 function calculateInterval(rating) {
-  // Simple interval calculation: Again: 1 day, Hard: 3 days, Good: 7 days, Easy: 14 days
-  // These can be adjusted or made more sophisticated (e.g., based on previous interval)
-  const intervals = [1, 3, 7, 14]; // Days
-  return intervals[Math.max(0, Math.min(rating, intervals.length - 1))] || 1; // Ensure rating is within bounds
+  const intervals = [1, 3, 7, 14]; 
+  return intervals[Math.max(0, Math.min(rating, intervals.length - 1))] || 1; 
 }
 
 /**
@@ -163,29 +174,31 @@ function calculateInterval(rating) {
  */
 function processCardsWithProgress(rawCards, userProgress) {
   const now = new Date();
-  now.setHours(0, 0, 0, 0); // Normalize 'now' to the beginning of the day for due date comparison
+  now.setHours(0, 0, 0, 0); 
 
   return rawCards.map(card => {
     const progress = userProgress[card.FlashcardID] || {
       rating: 0,
       lastReview: null,
       nextDue: null,
-      interval: calculateInterval(0) // Default interval for new cards
+      interval: calculateInterval(0) 
     };
 
-    let isDue = true; // Default to due if no progress or nextDue is null
+    let isDue = true; 
     if (progress.nextDue) {
-      const nextDueDate = new Date(progress.nextDue);
-      nextDueDate.setHours(0,0,0,0); // Normalize nextDue to beginning of day
-      isDue = nextDueDate <= now;
+      const nextDueDate = progress.nextDue instanceof Date ? new Date(progress.nextDue.getTime()) : null; 
+      if (nextDueDate) {
+        nextDueDate.setHours(0,0,0,0); 
+        isDue = nextDueDate <= now;
+      }
     }
     
     return {
-      ...card, // Spread all properties from the raw card object
-      id: card.FlashcardID, // Ensure 'id' property is explicitly set for client-side if needed
+      ...card, 
+      id: card.FlashcardID, 
       rating: progress.rating,
-      lastReview: progress.lastReview,
-      nextDue: progress.nextDue,
+      lastReview: progress.lastReview instanceof Date ? progress.lastReview.toISOString() : null,
+      nextDue: progress.nextDue instanceof Date ? progress.nextDue.toISOString() : null,
       interval: progress.interval,
       isDue: isDue
     };
@@ -227,9 +240,6 @@ function recordCardRating(deckName, cardId, rating) {
         return { success: false, message: 'FlashcardID column not found in deck.' };
     }
 
-    // Ensure user-specific columns exist (rely on getUserDeckProgress to create if not present)
-    // For robustness, check again or ensure getUserDeckProgress has run for this user/deck combo.
-    // Simpler: Assume columns exist or will be handled by first load. For direct rating, they must.
     const userRatingCol = `${user.userName}_Rating`;
     const userLastReviewCol = `${user.userName}_LastReview`;
     const userNextDueCol = `${user.userName}_NextDue`;
@@ -238,12 +248,8 @@ function recordCardRating(deckName, cardId, rating) {
     let lastReviewColIndex = headers.indexOf(userLastReviewCol);
     let nextDueColIndex = headers.indexOf(userNextDueCol);
 
-    // If columns are STILL missing (e.g., direct rating call before any study session)
     if (ratingColIndex === -1 || lastReviewColIndex === -1 || nextDueColIndex === -1) {
         Logger.log(`Progress columns for ${user.userName} missing in ${deckName} during rating. Forcing creation.`);
-        // This is a bit of a self-heal, ideally getUserDeckProgress handles this robustly.
-        // Forcing a call to getUserDeckProgress here might be too heavy.
-        // Let's try to add them directly if missing, similar to getUserDeckProgress.
         const lastHeaderColumn = headers.length;
         const newHeadersToAdd = [];
         if (ratingColIndex === -1) newHeadersToAdd.push(userRatingCol);
@@ -263,7 +269,7 @@ function recordCardRating(deckName, cardId, rating) {
     }
 
 
-    let cardRowSheetIndex = -1; // 1-based index for sheet
+    let cardRowSheetIndex = -1; 
     for (let i = 1; i < allSheetData.length; i++) {
       if (allSheetData[i][cardIdColIndex] === cardId) {
         cardRowSheetIndex = i + 1;
@@ -287,7 +293,8 @@ function recordCardRating(deckName, cardId, rating) {
     return {
       success: true,
       message: 'Rating recorded successfully.',
-      nextDue: nextDueDate.toISOString(),
+      // Return dates as ISO strings for client
+      nextDue: nextDueDate.toISOString(), 
       interval: intervalDays
     };
   } catch (error) {
@@ -309,7 +316,7 @@ function getUserDueCards() {
       return { success: false, message: 'User not logged in.' };
     }
 
-    const decksResult = getAvailableDecks(true); // Exclude system sheets
+    const decksResult = getAvailableDecks(true); 
     if (!decksResult.success || !decksResult.decks) {
       return { success: false, message: decksResult.message || 'Could not retrieve available decks.' };
     }
@@ -319,7 +326,6 @@ function getUserDueCards() {
 
     userDecks.forEach(deckName => {
       try {
-        // Call getFlashcardsForDeck which already calculates due cards
         const deckInfo = getFlashcardsForDeck(deckName);
         if (deckInfo.success) {
           dueCardsByDeck[deckName] = {
@@ -327,7 +333,6 @@ function getUserDueCards() {
             dueCards: deckInfo.dueCards
           };
         } else {
-          // Log issue but continue; perhaps user doesn't have access or deck is malformed for them
           Logger.log(`Could not get card info for deck "${deckName}" for user "${user.userName}" during due card calculation: ${deckInfo.message}`);
           dueCardsByDeck[deckName] = { totalCards: 'N/A', dueCards: 'N/A', error: deckInfo.message };
         }
@@ -382,7 +387,7 @@ function resetDeckProgress(deckName) {
     }
 
     const numRows = deckSheet.getLastRow();
-    if (numRows > 1) { // Only clear if there are data rows
+    if (numRows > 1) { 
       if (ratingColIndex !== -1) {
         deckSheet.getRange(2, ratingColIndex + 1, numRows - 1, 1).clearContent();
       }
