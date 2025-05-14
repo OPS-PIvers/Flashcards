@@ -5,237 +5,332 @@
   function loadAdminPanel() {
     // First check admin access
     showLoadingIndicator();
-    
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (!result.success || !result.isAdmin) {
           showError('Admin access required');
           hideLoadingIndicator();
+          // Optionally, navigate away from admin attempt or back to deck list
+          // loadDeckList(); 
+          return;
+        }
+
+        // Load admin panel template
+        const contentArea = document.getElementById('appContent');
+        const adminPanelTemplate = document.getElementById('adminPanelTemplate');
+        if (adminPanelTemplate && adminPanelTemplate.content) {
+          contentArea.innerHTML = ''; // Clear existing content
+          contentArea.appendChild(adminPanelTemplate.content.cloneNode(true));
+        } else {
+          showError('Admin panel template not found.');
+          hideLoadingIndicator();
           return;
         }
         
-        // Load admin panel template
-        const contentArea = document.getElementById('appContent');
-        contentArea.innerHTML = document.getElementById('adminPanelTemplate').innerHTML;
-        
         // Setup tab switching
         setupAdminTabs();
-        
-        // Load deck list
+
+        // Load deck list for Deck Management tab
         loadAdminDeckList();
-        
-        // Load user list
+
+        // Load user list for User Management tab
         loadUserList();
-        
-        // Initialize dictionary lookup
-        initDictionaryLookup();
+
+        // Initialize dictionary lookup for Dictionary Tools tab
+        // This will only add listeners etc. if the dictionary tab is active
+        // and its content (from dictionaryLookupTemplate) is present.
+        // Ensure dictionaryLookupTemplate is included in adminPanelTemplate's dictionaryTab.
+        if (document.getElementById('dictionaryLookupTemplate')) { // Check if template exists
+            const dictionaryTabContent = document.getElementById('dictionaryTab');
+            const dictionaryTemplate = document.getElementById('dictionaryLookupTemplate');
+            if (dictionaryTabContent && dictionaryTemplate && dictionaryTemplate.content) {
+                 dictionaryTabContent.appendChild(dictionaryTemplate.content.cloneNode(true));
+                 initDictionaryLookup(); // Now safe to call
+            }
+        }
         
         hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function(err) {
+        handleError(err);
+        // Fallback if admin check fails severely
+        // loadDeckList(); 
+      })
       .getAdminAccess();
   }
-  
+
   /**
    * Setup tab switching in admin panel
    */
   function setupAdminTabs() {
     const tabs = document.querySelectorAll('.admin-tab');
-    
+    const tabContents = document.querySelectorAll('.tab-content');
+
     tabs.forEach(tab => {
       tab.addEventListener('click', function() {
-        // Remove active class from all tabs
+        // Remove active class from all tabs and content
         tabs.forEach(t => t.classList.remove('active'));
-        
-        // Add active class to clicked tab
+        tabContents.forEach(content => content.classList.remove('active'));
+
+        // Add active class to clicked tab and corresponding content
         this.classList.add('active');
-        
-        // Hide all tab content
-        document.querySelectorAll('.tab-content').forEach(content => {
-          content.classList.remove('active');
-        });
-        
-        // Show selected tab content
         const tabName = this.getAttribute('data-tab');
-        document.getElementById(tabName + 'Tab').classList.add('active');
+        const activeContent = document.getElementById(tabName + 'Tab');
+        if (activeContent) {
+          activeContent.classList.add('active');
+        }
       });
     });
   }
-  
+
   /**
    * Load deck list for admin panel
    */
   function loadAdminDeckList() {
     showLoadingIndicator();
-    
+    const decksTabContent = document.getElementById('decksTab'); // Target specific area
+    if (!decksTabContent) {
+        showError("Deck management area not found in admin panel.");
+        hideLoadingIndicator();
+        return;
+    }
+    // Initially show main deck list view within decksTab
+    decksTabContent.innerHTML = `
+        <div class="card">
+            <div class="card-title">Create New Deck</div>
+            <div class="form-group">
+                <label for="newDeckName" class="form-label">Deck Name</label>
+                <div class="input-with-button">
+                    <input type="text" id="newDeckName" class="form-control" placeholder="Enter deck name">
+                    <button id="createDeckBtn" class="btn">Create</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Manage Decks</div>
+            <div id="adminDeckListContainer" class="admin-deck-list">
+                <p>Loading decks...</p>
+            </div>
+        </div>
+    `;
+    // Add event listener to create deck button *after* it's in the DOM
+    const createDeckBtn = document.getElementById('createDeckBtn');
+    if (createDeckBtn) {
+      createDeckBtn.addEventListener('click', createNewDeck);
+    }
+
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
           displayAdminDeckList(result.decks);
         } else {
           handleError(result.message);
+          const deckListContainer = document.getElementById('adminDeckListContainer');
+          if(deckListContainer) deckListContainer.innerHTML = `<p>Error loading decks: ${escapeHtml(result.message)}</p>`;
         }
-        
         hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
-      .getAvailableDecks(false);
+      .withFailureHandler(function(err){
+        handleError(err);
+        const deckListContainer = document.getElementById('adminDeckListContainer');
+        if(deckListContainer) deckListContainer.innerHTML = `<p>Error loading decks: ${escapeHtml(err.message || err)}</p>`;
+        hideLoadingIndicator();
+      })
+      .getAvailableDecks(false); // Get all decks, including system ones if needed for some reason, or true for user decks
   }
-  
+
   /**
    * Display deck list in admin panel
-   * 
    * @param {Array} decks - List of deck names
    */
   function displayAdminDeckList(decks) {
-    const deckListElement = document.getElementById('deckList');
-    
+    const deckListElement = document.getElementById('adminDeckListContainer'); // Target specific container
+
     if (!deckListElement) {
+      console.error('Admin deck list container not found.');
       return;
     }
-    
+
     let html = '';
-    
-    // Filter out system sheets
-    const systemSheets = ['Config', 'Classes'];
-    const userDecks = decks.filter(deck => !systemSheets.includes(deck));
-    
-    userDecks.forEach(deckName => {
+    const systemSheets = ['Config', 'Classes']; // Define system sheets to filter out
+    const userDecks = decks.filter(deck => !systemSheets.includes(deck.name || deck)); // Adapt if decks are objects
+
+    userDecks.forEach(deckName => { // Assuming decks is an array of strings
       html += `
         <div class="admin-deck-item">
-          <div class="admin-deck-name">${deckName}</div>
+          <div class="admin-deck-name">${escapeHtml(deckName)}</div>
           <div class="admin-deck-actions">
-            <button class="btn btn-outline btn-sm" data-action="edit" data-deck="${deckName}">Edit</button>
-            <button class="btn btn-outline btn-sm" data-action="delete" data-deck="${deckName}">Delete</button>
+            <button class="btn btn-outline btn-sm" data-action="edit" data-deck="${escapeHtml(deckName)}">Edit</button>
+            <button class="btn btn-outline btn-sm" data-action="delete" data-deck="${escapeHtml(deckName)}">Delete</button>
           </div>
         </div>
       `;
     });
-    
+
     if (userDecks.length === 0) {
-      html = '<p>No decks found. Create a new deck to get started.</p>';
+      html = '<p>No user decks found. Create a new deck to get started.</p>';
     }
-    
+
     deckListElement.innerHTML = html;
-    
+
     // Add event listeners to action buttons
-    document.querySelectorAll('[data-action="edit"]').forEach(btn => {
+    deckListElement.querySelectorAll('[data-action="edit"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const deckName = this.getAttribute('data-deck');
         showDeckEditor(deckName);
       });
     });
-    
-    document.querySelectorAll('[data-action="delete"]').forEach(btn => {
+
+    deckListElement.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const deckName = this.getAttribute('data-deck');
         deleteDeck(deckName);
       });
     });
-    
-    // Add event listener to create deck button
-    const createDeckBtn = document.getElementById('createDeckBtn');
-    if (createDeckBtn) {
-      createDeckBtn.addEventListener('click', createNewDeck);
-    }
   }
   
   /**
    * Create a new deck
    */
   function createNewDeck() {
-    const deckName = document.getElementById('newDeckName').value.trim();
-    
+    const newDeckNameInput = document.getElementById('newDeckName');
+    if (!newDeckNameInput) {
+        handleError("Deck name input field not found.");
+        return;
+    }
+    const deckName = newDeckNameInput.value.trim();
+
     if (!deckName) {
       handleError('Deck name is required');
       return;
     }
-    
+
     showLoadingIndicator();
-    
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
           showSuccess(result.message);
-          loadAdminDeckList();
-          document.getElementById('newDeckName').value = '';
+          loadAdminDeckList(); // Reload the list to show the new deck
+          newDeckNameInput.value = ''; // Clear input
         } else {
           handleError(result.message);
         }
-        
         hideLoadingIndicator();
       })
       .withFailureHandler(handleError)
       .createDeck(deckName);
   }
-  
+
   /**
    * Delete a deck
-   * 
    * @param {string} deckName - Name of the deck to delete
    */
   function deleteDeck(deckName) {
-    if (!confirm(`Are you sure you want to delete the deck "${deckName}"? This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete the deck "${escapeHtml(deckName)}"? This action cannot be undone.`)) {
       return;
     }
-    
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
           showSuccess(result.message);
-          loadAdminDeckList();
+          loadAdminDeckList(); // Reload to reflect deletion
         } else {
           handleError(result.message);
         }
-        
         hideLoadingIndicator();
       })
       .withFailureHandler(handleError)
       .deleteDeck(deckName);
   }
-  
+
+  // Store for cards being edited in a deck
+  window.adminDeckCache = {
+    cards: [],
+    deckName: null
+  };
+
   /**
-   * Show deck editor
-   * 
+   * Show deck editor (loads cards for a deck)
    * @param {string} deckName - Name of the deck to edit
    */
   function showDeckEditor(deckName) {
     showLoadingIndicator();
-    
+    window.adminDeckCache.deckName = deckName; // Store current deck name
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
-          displayDeckEditor(deckName, result.cards);
+          window.adminDeckCache.cards = result.cards || []; // Cache the cards
+          displayDeckEditorUI(deckName, window.adminDeckCache.cards);
         } else {
           handleError(result.message);
+          // Optionally, go back to deck list on error
+          // loadAdminDeckList(); 
         }
-        
         hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
-      .getFlashcardsForDeck(deckName);
+      .withFailureHandler(function(err) {
+          handleError(err);
+          // loadAdminDeckList();
+          hideLoadingIndicator();
+      })
+      .getFlashcardsForDeck(deckName); // This function needs to return card objects
   }
-  
+
   /**
-   * Display deck editor
-   * 
+   * Display deck editor UI
    * @param {string} deckName - Name of the deck
-   * @param {Array} cards - Array of flashcards
+   * @param {Array<Object>} cards - Array of flashcard objects
    */
-  function displayDeckEditor(deckName, cards) {
-    const contentArea = document.getElementById('decksTab');
-    
-    let html = `
+  function displayDeckEditorUI(deckName, cards) {
+    const decksTabContent = document.getElementById('decksTab'); // Target the main tab content area
+    if (!decksTabContent) {
+        showError("Deck management area not found.");
+        return;
+    }
+
+    let cardListHtml = '';
+    if (cards.length === 0) {
+      cardListHtml = '<p>No cards in this deck. Add a new card to get started.</p>';
+    } else {
+      cards.forEach(card => {
+        // Ensure card properties are escaped for HTML safety
+        const sideA = escapeHtml(card.sideA || '');
+        const sideB = escapeHtml(card.sideB || '');
+        const sideC = escapeHtml(card.sideC || '');
+        const tags = Array.isArray(card.tags) ? escapeHtml(card.tags.join(', ')) : '';
+        
+        cardListHtml += `
+          <div class="admin-card-item" data-card-id="${escapeHtml(card.id)}">
+            <div class="admin-card-content">
+              <strong>Side A:</strong> ${sideA}<br>
+              <strong>Side B:</strong> ${sideB}<br>
+              ${sideC ? `<strong>Side C:</strong> ${sideC}<br>` : ''}
+              ${tags ? `<strong>Tags:</strong> ${tags}` : ''}
+            </div>
+            <div class="admin-card-actions">
+              <button class="btn btn-outline btn-sm" data-action="edit-card" data-card-id="${escapeHtml(card.id)}">Edit</button>
+              <button class="btn btn-outline btn-sm" data-action="delete-card" data-card-id="${escapeHtml(card.id)}">Delete</button>
+              <button class="btn btn-outline btn-sm" data-action="add-dictionary" data-card-id="${escapeHtml(card.id)}">Dictionary</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    decksTabContent.innerHTML = `
       <div class="card">
-        <div class="card-title">Editing Deck: ${deckName}</div>
+        <div class="card-title">Editing Deck: ${escapeHtml(deckName)}</div>
         <div class="form-actions">
-          <button id="backToDecks" class="btn btn-outline">Back to Decks</button>
-          <button id="addCardBtn" class="btn">Add New Card</button>
+          <button id="backToAdminDecks" class="btn btn-outline">Back to Decks</button>
+          <button id="showAddCardFormBtn" class="btn">Add New Card</button>
         </div>
         
-        <div id="addCardForm" style="display: none; margin-top: 20px;">
+        <div id="addCardFormContainer" style="display: none; margin-top: 20px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
           <h3>Add New Card</h3>
           <div class="form-group">
             <label for="newCardSideA" class="form-label">Side A (Question)</label>
@@ -254,392 +349,362 @@
             <input type="text" id="newCardTags" class="form-control">
           </div>
           <div class="form-actions">
-            <button id="submitNewCard" class="btn btn-secondary">Save Card</button>
-            <button id="cancelAddCard" class="btn btn-outline">Cancel</button>
+            <button id="submitNewCardBtn" class="btn btn-secondary">Save Card</button>
+            <button id="cancelAddCardBtn" class="btn btn-outline">Cancel</button>
           </div>
         </div>
         
-        <div class="admin-card-list" id="cardList">
-    `;
-    
-    if (cards.length === 0) {
-      html += '<p>No cards in this deck. Add a new card to get started.</p>';
-    } else {
-      cards.forEach(card => {
-        html += `
-          <div class="admin-card-item" data-card-id="${card.id}">
-            <div class="admin-card-content">
-              <strong>Side A:</strong> ${card.sideA}<br>
-              <strong>Side B:</strong> ${card.sideB}<br>
-              ${card.sideC ? `<strong>Side C:</strong> ${card.sideC}<br>` : ''}
-              ${card.tags && card.tags.length > 0 ? `<strong>Tags:</strong> ${card.tags.join(', ')}` : ''}
-            </div>
-            <div class="admin-card-actions">
-              <button class="btn btn-outline btn-sm" data-action="edit-card" data-card-id="${card.id}">Edit</button>
-              <button class="btn btn-outline btn-sm" data-action="delete-card" data-card-id="${card.id}">Delete</button>
-              <button class="btn btn-outline btn-sm" data-action="add-dictionary" data-card-id="${card.id}">Dictionary</button>
-            </div>
-          </div>
-        `;
-      });
-    }
-    
-    html += `
-        </div>
+        <div class="admin-card-list" id="cardListDisplay">${cardListHtml}</div>
       </div>
     `;
+
+    // Add event listeners for this view
+    document.getElementById('backToAdminDecks').addEventListener('click', loadAdminDeckList);
     
-    contentArea.innerHTML = html;
-    
-    // Store deck name for later use
-    window.currentEditingDeck = deckName;
-    
-    // Add event listeners
-    document.getElementById('backToDecks').addEventListener('click', loadAdminDeckList);
-    
-    document.getElementById('addCardBtn').addEventListener('click', function() {
-      document.getElementById('addCardForm').style.display = 'block';
-      this.style.display = 'none';
+    document.getElementById('showAddCardFormBtn').addEventListener('click', function() {
+      document.getElementById('addCardFormContainer').style.display = 'block';
+      this.style.display = 'none'; // Hide the "Add New Card" button
     });
     
-    document.getElementById('cancelAddCard').addEventListener('click', function() {
-      document.getElementById('addCardForm').style.display = 'none';
-      document.getElementById('addCardBtn').style.display = 'inline-block';
+    document.getElementById('cancelAddCardBtn').addEventListener('click', function() {
+      document.getElementById('addCardFormContainer').style.display = 'none';
+      document.getElementById('newCardSideA').value = '';
+      document.getElementById('newCardSideB').value = '';
+      document.getElementById('newCardSideC').value = '';
+      document.getElementById('newCardTags').value = '';
+      document.getElementById('showAddCardFormBtn').style.display = 'inline-block'; // Show "Add New Card"
     });
     
-    document.getElementById('submitNewCard').addEventListener('click', function() {
-      addNewCard(deckName);
+    document.getElementById('submitNewCardBtn').addEventListener('click', function() {
+      addNewCardToDeck(deckName);
     });
     
-    // Add event listeners to card action buttons
-    document.querySelectorAll('[data-action="edit-card"]').forEach(btn => {
+    // Card action buttons
+    document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="edit-card"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
-        const cardElement = document.querySelector(`.admin-card-item[data-card-id="${cardId}"]`);
-        showCardEditor(cardElement, cardId, deckName);
+        const cardToEdit = window.adminDeckCache.cards.find(c => c.id === cardId);
+        if (cardToEdit) {
+          showCardEditorForm(this.closest('.admin-card-item'), cardToEdit, deckName);
+        } else {
+          showError("Card data not found for editing.");
+        }
       });
     });
     
-    document.querySelectorAll('[data-action="delete-card"]').forEach(btn => {
+    document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="delete-card"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
-        deleteCard(cardId, deckName);
+        deleteCardFromDeck(cardId, deckName);
       });
     });
     
-    document.querySelectorAll('[data-action="add-dictionary"]').forEach(btn => {
+    document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="add-dictionary"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
-        // Switch to dictionary tab and pre-select this card
-        document.querySelector('.admin-tab[data-tab="dictionary"]').click();
-        
-        // Find the word from the card content
-        const cardElement = document.querySelector(`.admin-card-item[data-card-id="${cardId}"]`);
-        if (cardElement) {
-          const sideAText = cardElement.textContent.split('Side A:')[1].split('Side B:')[0].trim();
-          // Extract first word (or potentially all text) for dictionary lookup
-          const wordToLookup = sideAText.split(' ')[0].replace(/[^a-zA-Z]/g, '');
-          
-          // Set the word in the dictionary lookup
-          const dictionaryWordInput = document.getElementById('dictionaryWord');
-          if (dictionaryWordInput) {
-            dictionaryWordInput.value = wordToLookup;
-            
-            // Auto select deck and card
-            const deckDropdown = document.getElementById('targetDeck');
-            if (deckDropdown) {
-              setTimeout(() => {
-                // Set timeout to ensure the dropdown is populated
-                deckDropdown.value = deckName;
-                deckDropdown.dispatchEvent(new Event('change'));
-                
-                // Select the card after deck change event
-                setTimeout(() => {
-                  const cardDropdown = document.getElementById('targetCard');
-                  if (cardDropdown) {
-                    cardDropdown.value = cardId;
-                  }
-                }, 500);
-              }, 500);
-            }
-            
-            // Trigger lookup
-            document.getElementById('lookupWordBtn').click();
-          }
+        const cardForDict = window.adminDeckCache.cards.find(c => c.id === cardId);
+        if (cardForDict) {
+            handleDictionaryForCard(cardForDict, deckName);
+        } else {
+            showError("Card data not found for dictionary action.");
         }
       });
     });
   }
-  
+
+  /**
+   * Handle dictionary lookup for a specific card
+   * @param {Object} card - The card object
+   * @param {string} deckName - The name of the current deck
+   */
+  function handleDictionaryForCard(card, deckName) {
+    // Switch to dictionary tab
+    const dictionaryTabButton = document.querySelector('.admin-tab[data-tab="dictionary"]');
+    if (dictionaryTabButton) {
+        dictionaryTabButton.click(); // This will also make the tab content visible
+    } else {
+        showError("Dictionary tab not found.");
+        return;
+    }
+
+    // Pre-fill and trigger lookup
+    // Wait a moment for the tab content to be potentially rendered and visible
+    setTimeout(() => {
+        const dictionaryWordInput = document.getElementById('dictionaryWord');
+        const lookupBtn = document.getElementById('lookupWordBtn');
+        const targetDeckDropdown = document.getElementById('targetDeck');
+
+        if (!dictionaryWordInput || !lookupBtn || !targetDeckDropdown) {
+            showError("Dictionary UI elements not found. Ensure the template is loaded.");
+            return;
+        }
+
+        // Use Side A as the default lookup term. Allow user to change if needed.
+        // Taking the first significant word or a short phrase might be better than the whole Side A.
+        let wordToLookup = (card.sideA || '').trim();
+        if (wordToLookup) {
+            // Simple strategy: take first few words, or up to a certain length
+            const words = wordToLookup.split(/\s+/);
+            wordToLookup = words.slice(0, 3).join(' '); // e.g., first 3 words
+             // Or, if it's a single long word, just use that.
+            if (words.length === 1 && words[0].length > 15) {
+                 wordToLookup = words[0];
+            }
+        }
+        
+        dictionaryWordInput.value = wordToLookup || '';
+
+        // Auto-select deck and card
+        // populateDeckDropdown is called by initDictionaryLookup, so it should be populated.
+        targetDeckDropdown.value = deckName;
+        // Trigger change to load cards for this deck
+        targetDeckDropdown.dispatchEvent(new Event('change')); 
+
+        // After cards are loaded (another async step), select the card
+        // This needs to be robust. `loadCardsForDeck` should ideally have a callback.
+        // For now, using a timeout as a temporary measure.
+        const intervalCheck = setInterval(function() {
+            const targetCardDropdown = document.getElementById('targetCard');
+            if (targetCardDropdown && targetCardDropdown.options.length > 1) { // Wait for options
+                targetCardDropdown.value = card.id;
+                if (targetCardDropdown.value === card.id) { // Check if selection was successful
+                    clearInterval(intervalCheck);
+                    if (wordToLookup && lookupBtn) {
+                        lookupBtn.click(); // Trigger lookup
+                    }
+                }
+            }
+        }, 200); // Check every 200ms
+
+        setTimeout(() => clearInterval(intervalCheck), 3000); // Timeout for safety
+
+    }, 100); // Small delay for tab switch
+  }
+
+
   /**
    * Add a new card to a deck
-   * 
    * @param {string} deckName - Name of the deck
    */
-  function addNewCard(deckName) {
+  function addNewCardToDeck(deckName) {
     const sideA = document.getElementById('newCardSideA').value.trim();
     const sideB = document.getElementById('newCardSideB').value.trim();
     const sideC = document.getElementById('newCardSideC').value.trim();
     const tags = document.getElementById('newCardTags').value.trim();
-    
+
     if (!sideA || !sideB) {
-      handleError('Side A and Side B are required');
+      handleError('Side A (Question) and Side B (Answer) are required.');
       return;
     }
-    
+
     showLoadingIndicator();
-    
-    const cardData = {
-      sideA: sideA,
-      sideB: sideB,
-      sideC: sideC,
-      tags: tags
-    };
-    
+    const cardData = { sideA, sideB, sideC, tags };
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
-          showSuccess('Card added successfully');
-          
-          // Reset form
+          showSuccess('Card added successfully!');
+          // Hide form and reset
+          document.getElementById('addCardFormContainer').style.display = 'none';
           document.getElementById('newCardSideA').value = '';
           document.getElementById('newCardSideB').value = '';
           document.getElementById('newCardSideC').value = '';
           document.getElementById('newCardTags').value = '';
+          document.getElementById('showAddCardFormBtn').style.display = 'inline-block';
           
-          // Hide form
-          document.getElementById('addCardForm').style.display = 'none';
-          document.getElementById('addCardBtn').style.display = 'inline-block';
-          
-          // Reload deck editor
-          showDeckEditor(deckName);
+          // Reload deck editor to show the new card
+          showDeckEditor(deckName); 
         } else {
           handleError(result.message);
         }
-        
         hideLoadingIndicator();
       })
       .withFailureHandler(handleError)
       .addFlashcard(deckName, cardData);
   }
-  
+
   /**
-   * Show card editor form
-   * 
-   * @param {Element} cardElement - The card element
-   * @param {string} cardId - ID of the card
+   * Show card editor form inline
+   * @param {Element} cardElement - The .admin-card-item element
+   * @param {Object} card - The card object (with id, sideA, sideB, sideC, tags)
    * @param {string} deckName - Name of the deck
    */
-  function showCardEditor(cardElement, cardId, deckName) {
-    // Extract card data from the element
-    const cardContent = cardElement.querySelector('.admin-card-content').textContent;
-    
-    // Parse card content
-    const sideA = cardContent.split('Side A:')[1].split('Side B:')[0].trim();
-    const sideB = cardContent.split('Side B:')[1].split('Side C:')[0].split('Tags:')[0].trim();
-    
-    let sideC = '';
-    if (cardContent.includes('Side C:')) {
-      sideC = cardContent.split('Side C:')[1].split('Tags:')[0].trim();
-    }
-    
-    let tags = '';
-    if (cardContent.includes('Tags:')) {
-      tags = cardContent.split('Tags:')[1].trim();
-    }
-    
-    // Create edit form
-    const editForm = document.createElement('div');
-    editForm.className = 'card-edit-form';
-    editForm.innerHTML = `
-      <div class="form-group">
-        <label for="editCardSideA" class="form-label">Side A (Question)</label>
-        <input type="text" id="editCardSideA" class="form-control" value="${sideA}" required>
-      </div>
-      <div class="form-group">
-        <label for="editCardSideB" class="form-label">Side B (Answer)</label>
-        <input type="text" id="editCardSideB" class="form-control" value="${sideB}" required>
-      </div>
-      <div class="form-group">
-        <label for="editCardSideC" class="form-label">Side C (Additional Info)</label>
-        <textarea id="editCardSideC" class="form-control" rows="3">${sideC}</textarea>
-      </div>
-      <div class="form-group">
-        <label for="editCardTags" class="form-label">Tags (comma-separated)</label>
-        <input type="text" id="editCardTags" class="form-control" value="${tags}">
-      </div>
-      <div class="form-actions">
-        <button id="saveEditCard" class="btn btn-secondary">Save Changes</button>
-        <button id="cancelEditCard" class="btn btn-outline">Cancel</button>
+  function showCardEditorForm(cardElement, card, deckName) {
+    // Store original content to restore on cancel
+    const originalContentHtml = cardElement.innerHTML;
+
+    cardElement.innerHTML = `
+      <div class="card-edit-form" style="background-color: #f9f9f9; padding: 10px; border-radius: 4px;">
+        <h4>Edit Card (ID: ${escapeHtml(card.id)})</h4>
+        <div class="form-group">
+          <label for="editCardSideA-${card.id}" class="form-label">Side A</label>
+          <input type="text" id="editCardSideA-${card.id}" class="form-control" value="${escapeHtml(card.sideA || '')}" required>
+        </div>
+        <div class="form-group">
+          <label for="editCardSideB-${card.id}" class="form-label">Side B</label>
+          <input type="text" id="editCardSideB-${card.id}" class="form-control" value="${escapeHtml(card.sideB || '')}" required>
+        </div>
+        <div class="form-group">
+          <label for="editCardSideC-${card.id}" class="form-label">Side C</label>
+          <textarea id="editCardSideC-${card.id}" class="form-control" rows="3">${escapeHtml(card.sideC || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="editCardTags-${card.id}" class="form-label">Tags</label>
+          <input type="text" id="editCardTags-${card.id}" class="form-control" value="${escapeHtml(Array.isArray(card.tags) ? card.tags.join(', ') : (card.tags || ''))}">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-secondary btn-sm" data-action="save-edit" data-card-id="${card.id}">Save</button>
+          <button class="btn btn-outline btn-sm" data-action="cancel-edit">Cancel</button>
+        </div>
       </div>
     `;
-    
-    // Replace card content with edit form
-    const originalContent = cardElement.innerHTML;
-    cardElement.innerHTML = '';
-    cardElement.appendChild(editForm);
-    
-    // Add event listeners
-    document.getElementById('saveEditCard').addEventListener('click', function() {
-      updateCard(cardId, deckName);
+
+    cardElement.querySelector('[data-action="save-edit"]').addEventListener('click', function() {
+      updateEditedCard(card.id, deckName);
     });
-    
-    document.getElementById('cancelEditCard').addEventListener('click', function() {
-      // Restore original content
-      cardElement.innerHTML = originalContent;
-      
-      // Re-add event listeners
-      cardElement.querySelector('[data-action="edit-card"]').addEventListener('click', function() {
-        showCardEditor(cardElement, cardId, deckName);
-      });
-      
-      cardElement.querySelector('[data-action="delete-card"]').addEventListener('click', function() {
-        deleteCard(cardId, deckName);
-      });
-      
-      cardElement.querySelector('[data-action="add-dictionary"]').addEventListener('click', function() {
-        // Dictionary functionality
-        document.querySelector('.admin-tab[data-tab="dictionary"]').click();
-      });
+
+    cardElement.querySelector('[data-action="cancel-edit"]').addEventListener('click', function() {
+      cardElement.innerHTML = originalContentHtml; // Restore original
+      // Re-attach listeners for the restored buttons
+      const restoredEditBtn = cardElement.querySelector('[data-action="edit-card"]');
+      if (restoredEditBtn) {
+          restoredEditBtn.addEventListener('click', () => showCardEditorForm(cardElement, card, deckName));
+      }
+      const restoredDeleteBtn = cardElement.querySelector('[data-action="delete-card"]');
+      if (restoredDeleteBtn) {
+          restoredDeleteBtn.addEventListener('click', () => deleteCardFromDeck(card.id, deckName));
+      }
+      const restoredDictBtn = cardElement.querySelector('[data-action="add-dictionary"]');
+      if (restoredDictBtn) {
+          restoredDictBtn.addEventListener('click', () => handleDictionaryForCard(card, deckName));
+      }
     });
   }
-  
+
   /**
-   * Update a card
-   * 
+   * Update an edited card
    * @param {string} cardId - ID of the card
    * @param {string} deckName - Name of the deck
    */
-  function updateCard(cardId, deckName) {
-    const sideA = document.getElementById('editCardSideA').value.trim();
-    const sideB = document.getElementById('editCardSideB').value.trim();
-    const sideC = document.getElementById('editCardSideC').value.trim();
-    const tags = document.getElementById('editCardTags').value.trim();
-    
+  function updateEditedCard(cardId, deckName) {
+    const sideA = document.getElementById(`editCardSideA-${cardId}`).value.trim();
+    const sideB = document.getElementById(`editCardSideB-${cardId}`).value.trim();
+    const sideC = document.getElementById(`editCardSideC-${cardId}`).value.trim();
+    const tags = document.getElementById(`editCardTags-${cardId}`).value.trim();
+
     if (!sideA || !sideB) {
-      handleError('Side A and Side B are required');
+      handleError('Side A and Side B are required.');
       return;
     }
-    
     showLoadingIndicator();
-    
-    const cardData = {
-      sideA: sideA,
-      sideB: sideB,
-      sideC: sideC,
-      tags: tags
-    };
-    
+    const cardData = { sideA, sideB, sideC, tags };
+
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
-          showSuccess('Card updated successfully');
-          
-          // Reload deck editor
-          showDeckEditor(deckName);
+          showSuccess('Card updated successfully!');
+          showDeckEditor(deckName); // Reload the deck editor view
         } else {
           handleError(result.message);
         }
-        
         hideLoadingIndicator();
       })
       .withFailureHandler(handleError)
       .updateFlashcard(deckName, cardId, cardData);
   }
-  
+
   /**
-   * Delete a card
-   * 
+   * Delete a card from a deck
    * @param {string} cardId - ID of the card
    * @param {string} deckName - Name of the deck
    */
-  function deleteCard(cardId, deckName) {
-    if (!confirm('Are you sure you want to delete this card? This action cannot be undone.')) {
+  function deleteCardFromDeck(cardId, deckName) {
+    if (!confirm(`Are you sure you want to delete card ID "${escapeHtml(cardId)}"? This cannot be undone.`)) {
       return;
     }
-    
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
-          showSuccess('Card deleted successfully');
-          
-          // Reload deck editor
-          showDeckEditor(deckName);
+          showSuccess('Card deleted successfully!');
+          showDeckEditor(deckName); // Reload
         } else {
           handleError(result.message);
         }
-        
         hideLoadingIndicator();
       })
       .withFailureHandler(handleError)
       .deleteFlashcard(deckName, cardId);
   }
-  
+
   /**
-   * Load user list
+   * Load user list for admin panel
    */
   function loadUserList() {
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         if (result.success) {
           displayUserList(result.users);
         } else {
           handleError(result.message);
+          const userListTbody = document.querySelector('#userList table tbody');
+          if (userListTbody) userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(result.message)}</td></tr>`;
         }
-        
         hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function(err) {
+        handleError(err);
+        const userListTbody = document.querySelector('#userList table tbody');
+        if (userListTbody) userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(err.message || err)}</td></tr>`;
+        hideLoadingIndicator();
+      })
       .getUsers();
   }
-  
+
   /**
-   * Display user list
-   * 
-   * @param {Array} users - Array of user objects
+   * Display user list in admin panel
+   * @param {Array<Object>} users - Array of user objects
    */
   function displayUserList(users) {
-    const userListElement = document.getElementById('userList');
-    
-    if (!userListElement) {
+    const userListTableBody = document.querySelector('#userList table tbody');
+    if (!userListTableBody) {
+      console.error('User list table body not found.');
       return;
     }
-    
-    const tableBody = userListElement.querySelector('tbody');
-    
-    if (!tableBody) {
-      return;
-    }
-    
+
     let html = '';
-    
-    users.forEach(user => {
-      html += `
-        <tr>
-          <td>${user.StudentFirst} ${user.StudentLast}</td>
-          <td>${user.UserName}</td>
-          <td>${user.IsAdmin === 'TRUE' || user.IsAdmin === true ? 'Admin' : 'Student'}</td>
-          <td>${user.LastLogin ? new Date(user.LastLogin).toLocaleString() : 'Never'}</td>
-          <td>
-            <button class="btn btn-outline btn-sm" data-action="view-progress" data-username="${user.UserName}">Progress</button>
-          </td>
-        </tr>
-      `;
-    });
-    
-    tableBody.innerHTML = html;
-    
-    // Add event listeners
-    document.querySelectorAll('[data-action="view-progress"]').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const username = this.getAttribute('data-username');
-        // TODO: Implement view progress functionality
-        alert('View progress for ' + username + ' (not implemented yet)');
+    if (!users || users.length === 0) {
+      html = '<tr><td colspan="5">No users found.</td></tr>';
+    } else {
+      users.forEach(user => {
+        const isAdmin = user.IsAdmin === 'TRUE' || user.IsAdmin === true;
+        const lastLogin = user.LastLogin ? new Date(user.LastLogin).toLocaleString() : 'Never';
+        html += `
+          <tr>
+            <td>${escapeHtml(user.StudentFirst || '')} ${escapeHtml(user.StudentLast || '')}</td>
+            <td>${escapeHtml(user.UserName || '')}</td>
+            <td>${isAdmin ? 'Admin' : 'Student'}</td>
+            <td>${escapeHtml(lastLogin)}</td>
+            <td>
+              <button class="btn btn-outline btn-sm" data-action="view-progress" data-username="${escapeHtml(user.UserName || '')}" disabled>Progress</button>
+              <!-- Add other user actions here, e.g., edit user, reset password -->
+            </td>
+          </tr>
+        `;
       });
+    }
+    userListTableBody.innerHTML = html;
+
+    // Add event listeners for any new buttons (currently 'view-progress' is disabled)
+    userListTableBody.querySelectorAll('[data-action="view-progress"]').forEach(btn => {
+      if (!btn.disabled) {
+        btn.addEventListener('click', function() {
+          const username = this.getAttribute('data-username');
+          // TODO: Implement view progress functionality
+          alert('View progress for ' + username + ' (not implemented yet)');
+        });
+      }
     });
   }
 </script>
