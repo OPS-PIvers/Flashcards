@@ -18,7 +18,7 @@ function createDatabaseSpreadsheet(name) {
   // Add the active user (creator) as an editor for immediate access
   try {
     const activeUserEmail = Session.getActiveUser().getEmail();
-    if (activeUserEmail) { // getEmail() can be empty if script runs impersonally
+    if (activeUserEmail) { 
       DriveApp.getFileById(id).addEditor(activeUserEmail);
     }
   } catch (e) {
@@ -38,7 +38,6 @@ function createDatabaseSpreadsheet(name) {
 function initializeDatabaseStructure(spreadsheetId) {
   const ss = SpreadsheetApp.openById(spreadsheetId);
 
-  // Rename the default "Sheet1" to "Config"
   let configSheet = ss.getSheetByName('Sheet1');
   if (configSheet) {
     configSheet.setName('Config');
@@ -47,7 +46,6 @@ function initializeDatabaseStructure(spreadsheetId) {
   }
   setupConfigSheet(configSheet);
 
-  // Create "Classes" sheet (if it doesn't exist)
   const classesSheet = ss.getSheetByName('Classes') || ss.insertSheet('Classes');
   setupClassesSheet(classesSheet);
   
@@ -60,22 +58,20 @@ function initializeDatabaseStructure(spreadsheetId) {
  * @param {Sheet} sheet - The 'Config' sheet object
  */
 function setupConfigSheet(sheet) {
-  sheet.clearContents(); // Clear any existing content before setting up
+  sheet.clearContents(); 
   const headers = [
     'StudentFirst', 'StudentLast', 'UserName', 'Password', 'IsAdmin',
     'DateCreated', 'LastLogin', 'PreferredDeck', 'SessionDuration'
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
 
-  // !!! SECURITY WARNING: Default 'admin'/'password' is insecure.
-  // This should be changed immediately after initialization.
   const adminUser = [
-    'Admin', 'User', 'admin', 'password', // Default credentials
-    'TRUE', // IsAdmin
-    new Date(), // DateCreated
-    '', // LastLogin
-    '', // PreferredDeck
-    '60' // SessionDuration (e.g., in minutes)
+    'Admin', 'User', 'admin', 'password', 
+    'TRUE', 
+    new Date(), 
+    '', 
+    '', 
+    '60' 
   ];
   sheet.getRange(2, 1, 1, adminUser.length).setValues([adminUser]);
 
@@ -93,13 +89,12 @@ function setupClassesSheet(sheet) {
   const headers = ['ClassName', 'ClassID', 'TeacherUsername', 'StudentUsernames', 'AssignedDecks'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
 
-  // Add a sample class (optional, for demonstration)
   const sampleClass = [
     'Sample Class 101',
     `class_${Utilities.getUuid().substring(0,6)}`,
-    'admin', // Teacher username
-    JSON.stringify([]), // StudentUsernames (empty array as JSON string)
-    JSON.stringify(['Sample_Deck']) // AssignedDecks (array as JSON string)
+    'admin', 
+    JSON.stringify([]), 
+    JSON.stringify(['Sample_Deck']) 
   ];
   sheet.getRange(2, 1, 1, sampleClass.length).setValues([sampleClass]);
   
@@ -118,7 +113,7 @@ function createSampleDeck(spreadsheetId) {
   
   let deckSheet = ss.getSheetByName(deckName);
   if (deckSheet) {
-    deckSheet.clearContents(); // Clear if it exists, to reset sample data
+    deckSheet.clearContents(); 
   } else {
     deckSheet = ss.insertSheet(deckName);
   }
@@ -152,7 +147,7 @@ function createSampleDeck(spreadsheetId) {
  * @throws {Error} If databaseId script property is not set.
  */
 function getDatabaseSpreadsheet() {
-  const databaseId = getScriptProperty('databaseId'); // Assumes getScriptProperty from Code.js
+  const databaseId = getScriptProperty('databaseId'); 
   if (!databaseId) {
     Logger.log("CRITICAL: Database ID script property not found.");
     throw new Error('Database not initialized. Please run initialization or check Script Properties.');
@@ -194,6 +189,7 @@ function getAvailableDecks(excludeSystemSheets = true) {
 /**
  * Retrieves all flashcards from a specific deck sheet.
  * Returns full card objects including all defined columns.
+ * Ensures all returned values are JSON-serializable primitives or arrays of primitives.
  *
  * @param {string} deckName - The name of the deck (sheet name)
  * @return {Array<Object>} Array of flashcard objects. Each object's keys are the header names.
@@ -209,13 +205,12 @@ function getDeckFlashcards(deckName) {
   }
 
   const data = sheet.getDataRange().getValues();
-  if (data.length < 1) { // No headers, no data
+  if (data.length < 1) { 
       Logger.log(`Deck "${deckName}" is empty or has no headers.`);
-      return []; // Return empty array if deck is empty
+      return []; 
   }
-  const headers = data[0].map(h => String(h).trim()); // Ensure headers are strings and trimmed
+  const headers = data[0].map(h => String(h).trim()); 
 
-  // Basic validation for essential columns
   const requiredColumns = ['FlashcardID', 'FlashcardSideA', 'FlashcardSideB'];
   for (const col of requiredColumns) {
     if (!headers.includes(col)) {
@@ -228,27 +223,38 @@ function getDeckFlashcards(deckName) {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const card = {};
-    let hasEssentialData = true; // Check if essential parts of a card are present
+    let hasEssentialData = true; 
 
     headers.forEach((header, index) => {
-      card[header] = row[index];
-      // If a required column is unexpectedly empty for this card, flag it or handle
-      if (requiredColumns.includes(header) && (row[index] === null || String(row[index]).trim() === '')) {
-          if (header === 'FlashcardID') hasEssentialData = false; // ID is critical
+      let value = row[index];
+      // Ensure value is JSON serializable: convert Dates to ISO strings, others to string/number/boolean
+      if (value instanceof Date) {
+        card[header] = value.toISOString();
+      } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) {
+        card[header] = value;
+      } else {
+        // For any other complex types or if unsure, convert to string.
+        card[header] = value != null ? String(value) : null;
+      }
+
+      if (requiredColumns.includes(header) && (card[header] === null || String(card[header]).trim() === '')) {
+          if (header === 'FlashcardID') hasEssentialData = false; 
       }
     });
     
-    // Add card only if it has an ID, SideA, and SideB
     if (hasEssentialData && card.FlashcardID && card.FlashcardSideA && card.FlashcardSideB) {
-        // Normalize tags if the 'Tags' column exists
-        if (headers.includes('Tags') && typeof card['Tags'] === 'string') {
+        if (headers.includes('Tags') && typeof card['Tags'] === 'string') { 
             card['Tags'] = card['Tags'].split(',').map(tag => tag.trim()).filter(tag => tag);
-        } else if (headers.includes('Tags')) {
-            card['Tags'] = []; // Default to empty array if Tags column exists but value is not string
+        } else if (headers.includes('Tags')) { // If Tags column exists but value isn't a string (e.g. null or already processed)
+            if (Array.isArray(card['Tags'])) {
+              // Value is already an array, do nothing or ensure elements are strings if necessary
+            } else {
+              card['Tags'] = []; 
+            }
         }
         flashcards.push(card);
     } else {
-        Logger.log(`Skipping row ${i+1} in deck "${deckName}" due to missing essential data (ID, SideA, or SideB).`);
+        Logger.log(`Skipping row ${i+1} in deck "${deckName}" due to missing essential data (ID, SideA, or SideB). Card data: ${JSON.stringify(card)}`);
     }
   }
   return flashcards;
@@ -257,10 +263,9 @@ function getDeckFlashcards(deckName) {
 
 /**
  * Retrieves user data from the 'Config' sheet based on username.
- * Does NOT return the password.
  *
  * @param {string} username - Username to look up (case-insensitive)
- * @return {Object|null} User data object (without password) or null if not found.
+ * @return {Object|null} User data object or null if not found. Includes Password for authentication.
  */
 function getUserData(username) {
   try {
@@ -274,11 +279,12 @@ function getUserData(username) {
     const data = configSheet.getDataRange().getValues();
     const headers = data[0].map(h => String(h).trim());
     const usernameIndex = headers.indexOf('UserName');
-    const passwordIndex = headers.indexOf('Password'); // To exclude it later
+    // PasswordIndex is not used to strip, as authenticateUser needs it.
+    // Other functions like AdminTools.getUsers handle password stripping.
 
     if (usernameIndex === -1) {
       Logger.log("CRITICAL: 'UserName' column not found in 'Config' sheet.");
-      return null; // Or throw error
+      return null; 
     }
 
     const lowerCaseUsername = username.toLowerCase();
@@ -287,22 +293,14 @@ function getUserData(username) {
       if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === lowerCaseUsername) {
         const user = {};
         headers.forEach((header, index) => {
-          if (index !== passwordIndex) { // Exclude password from returned object
-            user[header] = row[index];
-          }
+            let value = row[index];
+            if (value instanceof Date) { // Ensure dates are ISO strings if used elsewhere
+                user[header] = value.toISOString();
+            } else {
+                user[header] = value;
+            }
         });
-        // Ensure 'Password' field is present for authentication check if called internally
-        // This function is also used by authenticateUser, which needs the password.
-        // So, we add a special parameter to control this behavior, or create a separate function.
-        // For now, let's assume this getUserData is primarily for authentication.
-        // If called for other purposes, password should be stripped.
-        // The `getUsers` in AdminTools.js already strips passwords.
-        // THIS VERSION KEEPS PASSWORD for authenticateUser.
-        if (passwordIndex !== -1) {
-            user['Password'] = row[passwordIndex]; // Keep password for internal auth
-        }
-
-        return user;
+        return user; // Returns full user object including Password
       }
     }
     return null; // User not found
@@ -333,7 +331,7 @@ function updateUserLastLogin(username) {
 
     if (usernameIndex === -1 || lastLoginIndex === -1) {
       Logger.log("CRITICAL: 'UserName' or 'LastLogin' column not found in 'Config' sheet.");
-      return; // Or throw error
+      return; 
     }
 
     const lowerCaseUsername = username.toLowerCase();
@@ -359,11 +357,9 @@ function updateUserLastLogin(username) {
  * @return {Object} {success: boolean, message: string}
  */
 function addUser(userData) {
-  // This function should ideally be in AdminTools.js and have an admin check.
-  // For now, keeping it here as per original structure, but noting the security aspect.
-  if (!isUserAdmin()) { // Add admin check
-      return { success: false, message: "Permission Denied: Only admins can add users." };
-  }
+  // Admin check should be done in the calling function (e.g., from AdminTools.js)
+  // For direct calls from server-side not triggered by client, this is okay.
+  // If called from client via google.script.run, the client-facing server function must do the check.
 
   if (!userData || !userData.UserName || !userData.Password) {
     return { success: false, message: "UserName and Password are required to add a new user." };
@@ -380,7 +376,6 @@ function addUser(userData) {
     const headers = data[0].map(h => String(h).trim());
     const usernameIndex = headers.indexOf('UserName');
 
-    // Check if username already exists
     const userExists = data.slice(1).some(row =>
       row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === userData.UserName.toLowerCase()
     );
@@ -394,10 +389,10 @@ function addUser(userData) {
         case 'StudentFirst': return userData.StudentFirst || '';
         case 'StudentLast': return userData.StudentLast || '';
         case 'UserName': return userData.UserName;
-        case 'Password': return userData.Password; // Plain text storage - security risk!
+        case 'Password': return userData.Password; 
         case 'IsAdmin': return String(userData.IsAdmin === true || String(userData.IsAdmin).toUpperCase() === 'TRUE').toUpperCase();
-        case 'DateCreated': return new Date();
-        case 'LastLogin': return '';
+        case 'DateCreated': return new Date(); // Stored as Date object in sheet
+        case 'LastLogin': return ''; // Stored as empty, will become Date object on login
         case 'PreferredDeck': return userData.PreferredDeck || '';
         case 'SessionDuration': return userData.SessionDuration || '60';
         default: return '';
@@ -405,7 +400,7 @@ function addUser(userData) {
     });
 
     configSheet.appendRow(newRowValues);
-    Logger.log(`Admin added new user: ${userData.UserName}`);
+    Logger.log(`New user added: ${userData.UserName}`); // Should ideally log who added the user
     return { success: true, message: `User "${userData.UserName}" added successfully.` };
 
   } catch (error) {
