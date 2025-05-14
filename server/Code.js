@@ -25,7 +25,7 @@ function doGet(e) {
     Logger.log(`Serving page for user: ${templateData.userName || 'Guest'}, Admin: ${templateData.isAdmin}, LoggedIn: ${templateData.isLoggedIn}`);
 
     // Create and return the HTML output from the main 'index.html' template
-    const template = HtmlService.createTemplateFromFile('index');
+    const template = HtmlService.createTemplateFromFile('client/index');
     template.data = templateData; // Pass data to the template
 
     const output = template.evaluate()
@@ -153,5 +153,4 @@ function escapeHtml(str) {
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/"/g, '"')
-    .replace(/'/g, ''');
 }
