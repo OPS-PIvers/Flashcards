@@ -5,25 +5,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title><?= data.title ?></title>
-    
+
     <!-- Include Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    
+
     <!-- Include Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    
+
     <!-- Include CSS -->
-    <?!= include('client/style'); ?>
-    
+    <?!= include('client/style.html'); ?>
+
     <!-- Include ALL core JavaScript regardless of login state -->
-    <?!= include('client/main'); ?>
-    <?!= include('client/auth'); ?>
-    <?!= include('client/flashcards'); ?>
-    
+    <?!= include('client/main.html'); ?>
+    <?!= include('client/auth.html'); ?>
+    <?!= include('client/flashcards.html'); ?>
+
     <!-- Include admin JavaScript if user is admin -->
     <? if (data.isAdmin) { ?>
-      <?!= include('client/admin'); ?>
-      <?!= include('client/dictionary'); ?>
+      <?!= include('client/admin.html'); ?>
+      <?!= include('client/dictionary.html'); ?>
     <? } ?>
   </head>
   <body>
@@ -40,7 +40,7 @@
           <? } ?>
         </div>
       </header>
-      
+
       <main class="app-content" id="appContent">
         <!-- Content will be loaded here -->
         <div id="loadingIndicator" class="loading-indicator">
@@ -48,12 +48,12 @@
           <p>Loading...</p>
         </div>
       </main>
-      
+
       <footer class="app-footer">
-        <p>&copy; 2025 Flashcard App</p>
+        <p>© 2025 Flashcard App</p>
       </footer>
     </div>
-    
+
     <!-- Initialize App -->
     <script>
       document.addEventListener('DOMContentLoaded', function() {
@@ -66,14 +66,14 @@
         });
       });
     </script>
-    
+
     <!-- Include all partial templates -->
-    <?!= include('partials/login'); ?>
-    <?!= include('partials/flashcardView'); ?>
-    <?!= include('partials/deckList'); ?>
+    <?!= include('partials/login.html'); ?>
+    <?!= include('partials/flashcardView.html'); ?>
+    <?!= include('partials/deckList.html'); ?>
     <? if (data.isAdmin) { ?>
-      <?!= include('partials/adminPanel'); ?>
-      <?!= include('partials/dictionaryLookup'); ?>
+      <?!= include('partials/adminPanel.html'); ?>
+      <?!= include('partials/dictionaryLookup.html'); ?>
     <? } ?>
   </body>
 </html>

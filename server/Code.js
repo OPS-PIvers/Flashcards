@@ -25,7 +25,7 @@ function doGet(e) {
     Logger.log(`Serving page for user: ${templateData.userName || 'Guest'}, Admin: ${templateData.isAdmin}, LoggedIn: ${templateData.isLoggedIn}`);
 
     // Create and return the HTML output from the main 'index.html' template
-    const template = HtmlService.createTemplateFromFile('client/index');
+    const template = HtmlService.createTemplateFromFile('client/index.html'); // Main template file
     template.data = templateData; // Pass data to the template
 
     const output = template.evaluate()
@@ -146,11 +146,12 @@ function initializeApp(options = {}) {
 // Could be part of a shared utilities module if more widely needed on server-side.
 function escapeHtml(str) {
   if (typeof str !== 'string') {
-    return String(str); // Convert non-strings to string representation
+    return String(str);
   }
   return str
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
