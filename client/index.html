@@ -13,17 +13,17 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <!-- Include CSS -->
-    <?!= include('css/style'); ?>
+    <?!= include('client/style'); ?>
     
     <!-- Include ALL core JavaScript regardless of login state -->
-    <?!= include('js/main'); ?>
-    <?!= include('js/auth'); ?>
-    <?!= include('js/flashcards'); ?>
+    <?!= include('client/main'); ?>
+    <?!= include('client/auth'); ?>
+    <?!= include('client/flashcards'); ?>
     
     <!-- Include admin JavaScript if user is admin -->
     <? if (data.isAdmin) { ?>
-      <?!= include('js/admin'); ?>
-      <?!= include('js/dictionary'); ?>
+      <?!= include('client/admin'); ?>
+      <?!= include('client/dictionary'); ?>
     <? } ?>
   </head>
   <body>
