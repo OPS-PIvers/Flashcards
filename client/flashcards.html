@@ -9,7 +9,9 @@
     
     google.script.run
       .withSuccessHandler(function(result) {
-        if (result.success) {
+        hideLoadingIndicator(); // Hide indicator once response is received
+
+        if (result && result.success) { // Check if result is truthy AND has success property
           // Store deck data
           window.app.currentDeck = deckName;
           window.app.currentCards = result.cards;
@@ -18,12 +20,20 @@
           // Show the flashcard view
           displayFlashcardView(result);
         } else {
-          handleError(result.message);
+          // Handle error or unexpected result
+          const errorMsg = result ? result.message : `Failed to load deck "${escapeHtml(deckName)}". Received an unexpected or null response from the server.`;
+          handleError(errorMsg);
+          // Optionally, navigate away or show deck list if critical
+          // loadDeckList(); 
         }
-        
-        hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function(err) {
+        // handleError in main.html already calls hideLoadingIndicator()
+        const errorDetail = err && err.message ? err.message : 'Unknown error';
+        handleError(`An error occurred while loading deck "${escapeHtml(deckName)}": ${errorDetail}`);
+        // Optionally, navigate away or show deck list
+        // loadDeckList();
+      })
       .getFlashcardsForDeck(deckName);
   }
   
@@ -43,7 +53,7 @@
       contentArea.innerHTML = `
         <div class="card">
           <div class="card-title">Great job!</div>
-          <p>You have no cards due in "${deckData.deckName}" right now.</p>
+          <p>You have no cards due in "${escapeHtml(deckData.deckName)}" right now.</p>
           <div class="form-actions" style="margin-top: 20px;">
             <button id="backToDeckList" class="btn">Back to Decks</button>
             <button id="studyAnyway" class="btn btn-outline">Study Anyway</button>
@@ -54,7 +64,8 @@
       // Add event listeners
       document.getElementById('backToDeckList').addEventListener('click', loadDeckList);
       document.getElementById('studyAnyway').addEventListener('click', function() {
-        displayFlashcard(deckData.cards, 0);
+        // Pass all cards if studying anyway
+        displayFlashcard(deckData.cards, 0); 
       });
       
       return;
@@ -71,7 +82,7 @@
    * @param {number} index - Index of the card to display
    */
   function displayFlashcard(cards, index) {
-    if (index >= cards.length) {
+    if (!cards || index >= cards.length) { // Added !cards check
       // End of deck reached
       showDeckComplete();
       return;
@@ -86,18 +97,18 @@
     contentArea.innerHTML = `
       <div class="flashcard-container">
         <div class="deck-info">
-          <h2>${window.app.currentDeck}</h2>
+          <h2>${escapeHtml(window.app.currentDeck)}</h2>
           <div class="progress">Card ${index + 1} of ${cards.length}</div>
         </div>
         
         <div class="flashcard" id="currentCard">
           <div class="flashcard-front">
-            <div class="flashcard-content">${card.sideA}</div>
+            <div class="flashcard-content">${escapeHtml(card.sideA)}</div>
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            <div class="flashcard-content">${card.sideB}</div>
-            <div class="flashcard-secondary">${sideCContent}</div>
+            <div class="flashcard-content">${escapeHtml(card.sideB)}</div>
+            <div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(sideCContent)}</div>
           </div>
         </div>
         
@@ -127,30 +138,40 @@
     `;
     
     // If card has dictionary content, process it
+    // Check card.sideC not just sideCContent, as sideCContent is already escaped.
     if (card.sideC && (card.sideC.includes('[AUDIO:') || card.sideC.includes('[IMAGE:'))) {
       google.script.run
         .withSuccessHandler(function(processedContent) {
           // Update the card back with processed content
-          const secondaryContent = document.querySelector('.flashcard-back .flashcard-secondary');
-          if (secondaryContent) {
-            secondaryContent.innerHTML = processedContent;
+          const secondaryContentElement = document.getElementById('flashcardSideCContent');
+          if (secondaryContentElement) {
+            secondaryContentElement.innerHTML = processedContent; // Processed content is already HTML
           }
+        })
+        .withFailureHandler(function(err){
+            console.error("Failed to render dictionary content:", err);
+            // sideCContent is already escaped and set, so it's a fallback
         })
         .renderDictionaryContent(card.sideC);
     }
     
     // Add event listeners
-    const flashcard = document.getElementById('currentCard');
-    flashcard.addEventListener('click', function() {
-      this.classList.toggle('flipped');
-      
-      // Show rating buttons when card is flipped to back
-      if (this.classList.contains('flipped')) {
-        document.getElementById('ratingButtons').style.display = 'flex';
-      } else {
-        document.getElementById('ratingButtons').style.display = 'none';
-      }
-    });
+    const flashcardElement = document.getElementById('currentCard'); // Renamed to avoid conflict
+    if (flashcardElement) {
+      flashcardElement.addEventListener('click', function() {
+        this.classList.toggle('flipped');
+        
+        // Show rating buttons when card is flipped to back
+        const ratingButtons = document.getElementById('ratingButtons');
+        if (ratingButtons) { // Check if element exists
+            if (this.classList.contains('flipped')) {
+                ratingButtons.style.display = 'flex';
+            } else {
+                ratingButtons.style.display = 'none';
+            }
+        }
+      });
+    }
     
     // Rating buttons
     document.querySelectorAll('.rating-btn').forEach(btn => {
@@ -162,7 +183,10 @@
     });
     
     // Back button
-    document.getElementById('backToDeckList').addEventListener('click', loadDeckList);
+    const backToDeckListButton = document.getElementById('backToDeckList');
+    if (backToDeckListButton) { // Check if element exists
+        backToDeckListButton.addEventListener('click', loadDeckList);
+    }
   }
   
   /**
@@ -178,16 +202,18 @@
     
     google.script.run
       .withSuccessHandler(function(result) {
-        if (result.success) {
+        hideLoadingIndicator(); // Hide indicator after server response
+        if (result && result.success) { // Check result
           // Move to the next card
           displayFlashcard(cards, index + 1);
         } else {
-          handleError(result.message);
+          handleError(result ? result.message : 'Failed to record card rating.');
         }
-        
-        hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function(err){ // Add failure handler
+        // handleError will hide indicator
+        handleError(err.message || 'An error occurred while rating the card.');
+      })
       .recordCardRating(window.app.currentDeck, cardId, rating);
   }
   
@@ -209,9 +235,16 @@
     `;
     
     // Add event listeners
-    document.getElementById('backToDeckList').addEventListener('click', loadDeckList);
-    document.getElementById('restartDeck').addEventListener('click', function() {
-      loadDeck(window.app.currentDeck);
+    const backButton = document.getElementById('backToDeckList');
+    if (backButton) backButton.addEventListener('click', loadDeckList);
+    
+    const restartButton = document.getElementById('restartDeck');
+    if (restartButton) restartButton.addEventListener('click', function() {
+      if (window.app.currentDeck) { // Ensure currentDeck is set
+        loadDeck(window.app.currentDeck);
+      } else {
+        loadDeckList(); // Fallback
+      }
     });
   }
 </script>
