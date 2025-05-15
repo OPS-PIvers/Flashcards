@@ -12,6 +12,13 @@
         hideLoadingIndicator(); // Hide indicator once response is received
 
         if (result && result.success) { // Check if result is truthy AND has success property
+          console.log('[loadDeck] Success. Server result:', result);
+          if (result.cards && result.cards.length > 0) {
+            console.log('[loadDeck] First card received from server:', JSON.parse(JSON.stringify(result.cards[0])));
+          } else {
+            console.log('[loadDeck] No cards received or cards array is empty.');
+          }
+          
           // Store deck data
           window.app.currentDeck = deckName;
           window.app.currentCards = result.cards;
@@ -22,6 +29,7 @@
         } else {
           // Handle error or unexpected result
           const errorMsg = result ? result.message : `Failed to load deck "${escapeHtml(deckName)}". Received an unexpected or null response from the server.`;
+          console.error('[loadDeck] Error or unexpected result:', result);
           handleError(errorMsg);
           // Optionally, navigate away or show deck list if critical
           // loadDeckList(); 
@@ -30,6 +38,7 @@
       .withFailureHandler(function(err) {
         // handleError in main.html already calls hideLoadingIndicator()
         const errorDetail = err && err.message ? err.message : 'Unknown error';
+        console.error('[loadDeck] Failure handler triggered:', err);
         handleError(`An error occurred while loading deck "${escapeHtml(deckName)}": ${errorDetail}`);
         // Optionally, navigate away or show deck list
         // loadDeckList();
@@ -44,12 +53,21 @@
    */
   function displayFlashcardView(deckData) {
     const contentArea = document.getElementById('appContent');
-    
+    console.log('[displayFlashcardView] deckData received:', deckData);
+    if (deckData.cards && deckData.cards.length > 0) {
+        console.log('[displayFlashcardView] First card in deckData.cards (before filter):', JSON.parse(JSON.stringify(deckData.cards[0])));
+    }
+
     // Filter for due cards
     const dueCards = deckData.cards.filter(card => card.isDue);
+    console.log('[displayFlashcardView] Number of due cards:', dueCards.length);
+    if (dueCards.length > 0) {
+        console.log('[displayFlashcardView] First due card (after filter):', JSON.parse(JSON.stringify(dueCards[0])));
+    }
     
     // Check if there are any due cards
     if (dueCards.length === 0) {
+      console.log('[displayFlashcardView] No due cards. Showing "Great job!" message.');
       contentArea.innerHTML = `
         <div class="card">
           <div class="card-title">Great job!</div>
@@ -64,6 +82,7 @@
       // Add event listeners
       document.getElementById('backToDeckList').addEventListener('click', loadDeckList);
       document.getElementById('studyAnyway').addEventListener('click', function() {
+        console.log('[displayFlashcardView] "Study Anyway" clicked.');
         // Pass all cards if studying anyway
         displayFlashcard(deckData.cards, 0); 
       });
@@ -72,6 +91,7 @@
     }
     
     // Display the first due card
+    console.log('[displayFlashcardView] Displaying first due card.');
     displayFlashcard(dueCards, 0);
   }
   
@@ -82,17 +102,28 @@
    * @param {number} index - Index of the card to display
    */
   function displayFlashcard(cards, index) {
+    console.log('[displayFlashcard] Called with index:', index, 'Total cards in current list:', cards ? cards.length : 'N/A');
+    
     if (!cards || index >= cards.length) { // Added !cards check
+      console.log('[displayFlashcard] End of deck reached or invalid card array.');
       // End of deck reached
       showDeckComplete();
       return;
     }
     
     const card = cards[index];
+    console.log('[displayFlashcard] Current card object:', JSON.parse(JSON.stringify(card))); // Deep copy for logging to avoid later modifications affecting log
+    console.log('[displayFlashcard] card.FlashcardSideA:', card.FlashcardSideA, '(type: ' + typeof card.FlashcardSideA + ')');
+    console.log('[displayFlashcard] card.FlashcardSideB:', card.FlashcardSideB, '(type: ' + typeof card.FlashcardSideB + ')');
+    console.log('[displayFlashcard] card.FlashcardSideC:', card.FlashcardSideC, '(type: ' + typeof card.FlashcardSideC + ')');
+    console.log('[displayFlashcard] card.id (should be FlashcardID):', card.id, '(type: ' + typeof card.id + ')');
+
+
     const contentArea = document.getElementById('appContent');
     
     // Process dictionary content in FlashcardSideC if present
     let sideCContent = card.FlashcardSideC || '';
+    console.log('[displayFlashcard] Initial sideCContent for display:', sideCContent);
     
     contentArea.innerHTML = `
       <div class="flashcard-container">
@@ -140,8 +171,10 @@
     // If card has dictionary content, process it
     // Check card.FlashcardSideC not just sideCContent, as sideCContent is already escaped.
     if (card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:'))) {
+      console.log('[displayFlashcard] Dictionary content found in FlashcardSideC. Calling renderDictionaryContent.');
       google.script.run
         .withSuccessHandler(function(processedContent) {
+          console.log('[displayFlashcard] renderDictionaryContent success. Processed content:', processedContent);
           // Update the card back with processed content
           const secondaryContentElement = document.getElementById('flashcardSideCContent');
           if (secondaryContentElement) {
@@ -149,7 +182,7 @@
           }
         })
         .withFailureHandler(function(err){
-            console.error("Failed to render dictionary content:", err);
+            console.error("[displayFlashcard] Failed to render dictionary content:", err);
             // sideCContent is already escaped and set, so it's a fallback
         })
         .renderDictionaryContent(card.FlashcardSideC);
@@ -178,7 +211,7 @@
       btn.addEventListener('click', function(e) {
         e.stopPropagation(); // Prevent card from flipping back
         const rating = parseInt(this.getAttribute('data-rating'));
-        rateCard(card.id, rating, cards, index);
+        rateCard(card.id, rating, cards, index); // Ensure card.id is correct here
       });
     });
     
@@ -199,19 +232,23 @@
    */
   function rateCard(cardId, rating, cards, index) {
     showLoadingIndicator();
+    console.log('[rateCard] Rating cardId:', cardId, 'with rating:', rating);
     
     google.script.run
       .withSuccessHandler(function(result) {
         hideLoadingIndicator(); // Hide indicator after server response
         if (result && result.success) { // Check result
+          console.log('[rateCard] Successfully rated card. Server response:', result);
           // Move to the next card
           displayFlashcard(cards, index + 1);
         } else {
+          console.error('[rateCard] Failed to record card rating. Server response:', result);
           handleError(result ? result.message : 'Failed to record card rating.');
         }
       })
       .withFailureHandler(function(err){ // Add failure handler
         // handleError will hide indicator
+        console.error('[rateCard] Error occurred while rating card:', err);
         handleError(err.message || 'An error occurred while rating the card.');
       })
       .recordCardRating(window.app.currentDeck, cardId, rating);
@@ -222,6 +259,7 @@
    */
   function showDeckComplete() {
     const contentArea = document.getElementById('appContent');
+    console.log('[showDeckComplete] Displaying deck completion screen.');
     
     contentArea.innerHTML = `
       <div class="card">
@@ -241,8 +279,10 @@
     const restartButton = document.getElementById('restartDeck');
     if (restartButton) restartButton.addEventListener('click', function() {
       if (window.app.currentDeck) { // Ensure currentDeck is set
+        console.log('[showDeckComplete] Restarting deck:', window.app.currentDeck);
         loadDeck(window.app.currentDeck);
       } else {
+        console.warn('[showDeckComplete] currentDeck not set, loading deck list as fallback.');
         loadDeckList(); // Fallback
       }
     });
