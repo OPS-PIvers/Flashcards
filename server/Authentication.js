@@ -41,25 +41,31 @@ function authenticateUser(username, password) {
     // Update last login time
     updateUserLastLogin(username); // Assumes updateUserLastLogin is defined (e.g., in Database.js)
 
-    // Set user session
-    Logger.log(`authenticateUser: For user "${username}", user.IsAdmin value from sheet: "${user.IsAdmin}", type: ${typeof user.IsAdmin}`);
+    // Log the raw IsAdmin value from the sheet
+    Logger.log(`authenticateUser: For user "${username}", raw user.IsAdmin value from sheet: "${user.IsAdmin}", type: ${typeof user.IsAdmin}`);
 
-    const isAdmin = user.IsAdmin === 'TRUE' || user.IsAdmin === true;
+    // Determine isAdmin status more robustly
+    let isAdmin = false;
+    if (typeof user.IsAdmin === 'boolean') {
+      isAdmin = user.IsAdmin; // Directly use the boolean value
+    } else if (typeof user.IsAdmin === 'string') {
+      isAdmin = user.IsAdmin.trim().toUpperCase() === 'TRUE'; // Handle string "TRUE" (case-insensitive)
+    }
+    // Add any other specific checks if needed, e.g., for numbers 1/0
 
-    // ADD THIS LOGGING:
     Logger.log(`authenticateUser: For user "${username}", calculated isAdmin for session: ${isAdmin}, type: ${typeof isAdmin}`);
 
     const sessionData = {
       userName: user.UserName,
       firstName: user.StudentFirst,
       lastName: user.StudentLast,
-      isAdmin: isAdmin,
+      isAdmin: isAdmin, // Use the robustly determined isAdmin value
       lastLogin: new Date().toISOString(),
       isValid: true
     };
 
     setUserSession(sessionData);
-    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdmin}`);
+    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdmin}. Session data set: ${JSON.stringify(sessionData)}`);
 
     return {
       success: true,
@@ -68,7 +74,7 @@ function authenticateUser(username, password) {
         userName: user.UserName,
         firstName: user.StudentFirst,
         lastName: user.StudentLast,
-        isAdmin: isAdmin
+        isAdmin: isAdmin // Return the correct isAdmin status
       }
     };
   } catch (error) {
@@ -109,14 +115,14 @@ function getUserSession() {
   try {
     const session = JSON.parse(sessionJson);
     // Basic validation of session object structure
-    if (session && typeof session.userName === 'string' && typeof session.isValid === 'boolean') {
+    if (session && typeof session.userName === 'string' && typeof session.isValid === 'boolean' && typeof session.isAdmin === 'boolean') { // Added isAdmin check
         return session;
     }
-    Logger.log("Invalid session structure found in UserProperties.");
+    Logger.log(`Invalid session structure found in UserProperties: ${JSON.stringify(session)}. Deleting.`);
     userProperties.deleteProperty('session'); // Clear invalid session
     return null;
   } catch (error) {
-    Logger.log(`Error parsing session from UserProperties: ${error.message}`);
+    Logger.log(`Error parsing session from UserProperties: ${error.message}. Deleting session property.`);
     userProperties.deleteProperty('session'); // Clear corrupted session
     return null;
   }
@@ -130,10 +136,14 @@ function getUserSession() {
 function logoutUser() {
   try {
     const userProperties = PropertiesService.getUserProperties();
-    const session = userProperties.getProperty('session');
-    if (session) {
-        const parsedSession = JSON.parse(session); // To log which user is logging out
-        Logger.log(`User logging out: ${parsedSession.userName}`);
+    const sessionJson = userProperties.getProperty('session'); // Renamed to avoid conflict
+    if (sessionJson) { // Check if sessionJson is not null
+        try {
+            const parsedSession = JSON.parse(sessionJson); // To log which user is logging out
+            Logger.log(`User logging out: ${parsedSession.userName}`);
+        } catch (e) {
+            Logger.log(`Could not parse session during logout, but proceeding to delete. Error: ${e.message}`);
+        }
     }
     userProperties.deleteProperty('session');
     return { success: true, message: 'You have been logged out successfully.' };
@@ -161,7 +171,10 @@ function isUserLoggedIn() {
  */
 function isUserAdmin() {
   const session = getUserSession();
-  return session && session.isValid === true && session.isAdmin === true;
+  // Logger.log(`isUserAdmin check: Session content: ${JSON.stringify(session)}`); // Can be verbose, enable if needed
+  const isAdminResult = session && session.isValid === true && session.isAdmin === true;
+  // Logger.log(`isUserAdmin check: Result: ${isAdminResult}`);
+  return isAdminResult;
 }
 
 /**
@@ -180,6 +193,6 @@ function getCurrentUserInfo() {
     userName: session.userName,
     firstName: session.firstName,
     lastName: session.lastName,
-    isAdmin: session.isAdmin
+    isAdmin: session.isAdmin // This now reflects the session's isAdmin value
   };
 }
