@@ -261,6 +261,8 @@ function getDeckFlashcards(deckName) {
 }
 
 
+// server/Database.js - Update the getUserData function
+
 /**
  * Retrieves user data from the 'Config' sheet based on username.
  *
@@ -279,8 +281,10 @@ function getUserData(username) {
     const data = configSheet.getDataRange().getValues();
     const headers = data[0].map(h => String(h).trim());
     const usernameIndex = headers.indexOf('UserName');
-    // PasswordIndex is not used to strip, as authenticateUser needs it.
-    // Other functions like AdminTools.getUsers handle password stripping.
+    const isAdminIndex = headers.indexOf('IsAdmin');
+    
+    // Debug log to see if IsAdmin column exists
+    Logger.log(`getUserData: Looking for user "${username}". IsAdmin column index: ${isAdminIndex}`);
 
     if (usernameIndex === -1) {
       Logger.log("CRITICAL: 'UserName' column not found in 'Config' sheet.");
@@ -291,16 +295,45 @@ function getUserData(username) {
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === lowerCaseUsername) {
+        // Found the user - directly check the cell for checkbox state
+        let isAdminValue = false;
+        
+        if (isAdminIndex !== -1) {
+          // CRITICAL FIX: Get the actual checkbox state from the sheet
+          try {
+            // Get the ACTUAL cell value directly, bypassing getValue/getValues which may convert incorrectly
+            const isAdminCell = configSheet.getRange(i+1, isAdminIndex+1);
+            // Log the raw checkbox value
+            Logger.log(`Raw IsAdmin cell value for ${username}: ${isAdminCell.getValue()}; Checkbox checked: ${isAdminCell.isChecked()}`);
+            
+            // Use isChecked() method which works specifically for checkboxes
+            isAdminValue = isAdminCell.isChecked();
+          } catch (checkboxErr) {
+            Logger.log(`Error getting checkbox state: ${checkboxErr.message}`);
+            // Fallback to normal value
+            isAdminValue = row[isAdminIndex] === true || 
+                         String(row[isAdminIndex]).toUpperCase() === 'TRUE';
+          }
+        }
+        
+        // Build user object manually to ensure correct IsAdmin value
         const user = {};
         headers.forEach((header, index) => {
-            let value = row[index];
-            if (value instanceof Date) { // Ensure dates are ISO strings if used elsewhere
-                user[header] = value.toISOString();
+            if (header === 'IsAdmin') {
+              // Override with our specially-checked value
+              user[header] = isAdminValue;
+              Logger.log(`Setting user.IsAdmin to ${isAdminValue} for user ${username}`);
             } else {
-                user[header] = value;
+              let value = row[index];
+              if (value instanceof Date) {
+                  user[header] = value.toISOString();
+              } else {
+                  user[header] = value;
+              }
             }
         });
-        return user; // Returns full user object including Password
+        
+        return user;
       }
     }
     return null; // User not found

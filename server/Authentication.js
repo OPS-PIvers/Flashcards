@@ -23,7 +23,34 @@ function authenticateUser(username, password) {
 
     // Get user data
     const user = getUserData(username); // Assumes getUserData is defined (e.g., in Database.js)
-
+    if (user) {
+      // Force admin status check directly from spreadsheet
+      Logger.log(`Forcing admin status check for ${username}`);
+      try {
+        const ss = getDatabaseSpreadsheet();
+        const configSheet = ss.getSheetByName('Config');
+        const headers = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
+        const isAdminColIndex = headers.indexOf('IsAdmin');
+        const usernameColIndex = headers.indexOf('UserName');
+        
+        if (isAdminColIndex !== -1 && usernameColIndex !== -1) {
+          const allData = configSheet.getDataRange().getValues();
+          for (let i = 1; i < allData.length; i++) {
+            if (allData[i][usernameColIndex] === username) {
+              // Get the actual cell to use isChecked() method
+              const isAdminCell = configSheet.getRange(i+1, isAdminColIndex+1);
+              const isChecked = isAdminCell.isChecked();
+              Logger.log(`CRITICAL: For ${username}, IsAdmin checkbox is ${isChecked ? 'CHECKED' : 'UNCHECKED'}`);
+              user.IsAdmin = isChecked; // Override with direct checkbox state
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        Logger.log(`Error in direct admin check: ${e.message}`);
+        // Continue with existing user object if this fails
+      }
+    }
     // Check if user exists
     if (!user) {
       Logger.log(`Login attempt failed: User not found - ${username}`);
