@@ -88,33 +88,38 @@ function forceAdminCheck(username) {
       return false;
     }
     
-    // Get header row to find column positions
-    const headerRow = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
-    const usernameCol = headerRow.indexOf('UserName');
-    const isAdminCol = headerRow.indexOf('IsAdmin');
+    // FIXED: Directly use column indices based on spreadsheet structure instead of header search
+    // Column C (index 2) = UserName
+    // Column E (index 4) = IsAdmin
+    const usernameCol = 2;  // C column (0-indexed)
+    const isAdminCol = 4;   // E column (0-indexed)
     
-    if (usernameCol === -1 || isAdminCol === -1) {
-      Logger.log(`forceAdminCheck: Couldn't find UserName or IsAdmin columns. Found: UserName=${usernameCol}, IsAdmin=${isAdminCol}`);
-      return false;
-    }
+    Logger.log(`forceAdminCheck: Using fixed column indices: UserName at column C (index ${usernameCol}), IsAdmin at column E (index ${isAdminCol})`);
     
     // Get all data
     const allData = configSheet.getDataRange().getValues();
+    
+    // Verify we have headers and log them
+    if (allData.length > 0) {
+      Logger.log(`forceAdminCheck: Header row: ${JSON.stringify(allData[0])}`);
+    }
     
     // Look for user
     for (let i = 1; i < allData.length; i++) {
       const row = allData[i];
       if (row[usernameCol] && row[usernameCol].toString() === username) {
         // Found user, check admin status
-        // Try all possible ways the checkbox might be stored
         const isAdminValue = row[isAdminCol];
         
         // Get direct cell for isChecked() method
         const isAdminCell = configSheet.getRange(i+1, isAdminCol+1);
+        Logger.log(`forceAdminCheck: Found user ${username} in row ${i+1}. Raw isAdmin value: ${isAdminValue}, type: ${typeof isAdminValue}`);
+        
+        // Try checkbox checked state
         let isChecked = false;
         try {
           isChecked = isAdminCell.isChecked();
-          Logger.log(`forceAdminCheck: isChecked() method result for ${username}: ${isChecked}`);
+          Logger.log(`forceAdminCheck: isChecked() method result: ${isChecked}`);
         } catch (e) {
           Logger.log(`forceAdminCheck: isChecked() failed: ${e.message}`);
         }
@@ -125,7 +130,7 @@ function forceAdminCheck(username) {
                       isAdminValue === 1 ||
                       isChecked === true;
         
-        Logger.log(`forceAdminCheck: Found user ${username} in row ${i+1}. IsAdmin value = ${isAdminValue} (${typeof isAdminValue}). Final determination: ${isAdmin}`);
+        Logger.log(`forceAdminCheck: Final admin determination for ${username}: ${isAdmin}`);
         return isAdmin;
       }
     }
