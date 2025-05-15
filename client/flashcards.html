@@ -91,8 +91,8 @@
     const card = cards[index];
     const contentArea = document.getElementById('appContent');
     
-    // Process dictionary content in sideC if present
-    let sideCContent = card.sideC || '';
+    // Process dictionary content in FlashcardSideC if present
+    let sideCContent = card.FlashcardSideC || '';
     
     contentArea.innerHTML = `
       <div class="flashcard-container">
@@ -103,11 +103,11 @@
         
         <div class="flashcard" id="currentCard">
           <div class="flashcard-front">
-            <div class="flashcard-content">${escapeHtml(card.sideA)}</div>
+            <div class="flashcard-content">${escapeHtml(card.FlashcardSideA)}</div>
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            <div class="flashcard-content">${escapeHtml(card.sideB)}</div>
+            <div class="flashcard-content">${escapeHtml(card.FlashcardSideB)}</div>
             <div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(sideCContent)}</div>
           </div>
         </div>
@@ -138,8 +138,8 @@
     `;
     
     // If card has dictionary content, process it
-    // Check card.sideC not just sideCContent, as sideCContent is already escaped.
-    if (card.sideC && (card.sideC.includes('[AUDIO:') || card.sideC.includes('[IMAGE:'))) {
+    // Check card.FlashcardSideC not just sideCContent, as sideCContent is already escaped.
+    if (card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:'))) {
       google.script.run
         .withSuccessHandler(function(processedContent) {
           // Update the card back with processed content
@@ -152,7 +152,7 @@
             console.error("Failed to render dictionary content:", err);
             // sideCContent is already escaped and set, so it's a fallback
         })
-        .renderDictionaryContent(card.sideC);
+        .renderDictionaryContent(card.FlashcardSideC);
     }
     
     // Add event listeners
