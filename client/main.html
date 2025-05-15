@@ -21,10 +21,33 @@ function initApp(options) {
   // Setup event listeners
   setupEventListeners();
   
+  // Adjust Admin Panel button visibility based on the definitive client-side admin state
+  const adminButton = document.getElementById('adminPanelBtn');
+  if (adminButton) {
+    // The button should only be visible if the user is logged in (handled by parent 'userInfo' div visibility)
+    // AND is an admin.
+    adminButton.style.display = window.app.isAdmin ? 'block' : 'none';
+  }
+  
   // Load initial page - with proper authentication checking
   if (window.app.isLoggedIn) {
+    // User info div should be visible if logged in
+    const userInfo = document.getElementById('userInfo');
+    if (userInfo) {
+        userInfo.style.display = 'flex';
+        // Ensure user name is displayed
+        const userNameSpan = userInfo.querySelector('span');
+        if (userNameSpan) {
+            userNameSpan.textContent = `Welcome, ${window.app.userName}`;
+        }
+    }
     loadDeckList();
   } else {
+    // User info div should be hidden if not logged in
+    const userInfo = document.getElementById('userInfo');
+    if (userInfo) {
+        userInfo.style.display = 'none';
+    }
     showLoginForm();
   }
   
@@ -75,6 +98,12 @@ function handleLogout() {
         userInfo.style.display = 'none';
       }
       
+      // Hide admin button specifically as well (its parent is now hidden, but good practice)
+      const adminButton = document.getElementById('adminPanelBtn');
+      if (adminButton) {
+        adminButton.style.display = 'none';
+      }
+      
       // Show login form
       showLoginForm();
       
@@ -99,10 +128,14 @@ function handleLogout() {
       if (userInfo) {
         userInfo.style.display = 'none';
       }
+      const adminButton = document.getElementById('adminPanelBtn');
+      if (adminButton) {
+        adminButton.style.display = 'none';
+      }
       
       showLoginForm();
       handleError('Logout failed: ' + (error ? error.toString() : 'Unknown error'));
-      hideLoadingIndicator();
+      hideLoadingIndicator(); // handleError might call this, but ensure it's called.
     })
     .logoutUser();
 }
@@ -121,7 +154,7 @@ function showLoginForm() {
   
   // Get login form HTML
   const loginForm = document.getElementById('loginFormTemplate');
-  if (loginForm) {
+  if (loginForm && loginForm.content) { // check loginForm.content
     contentArea.appendChild(loginForm.content.cloneNode(true));
     
     // Setup login form event listeners
@@ -160,9 +193,9 @@ function loadDeckList() {
       if (result.success) {
         displayDeckList(result.decks || [], result.dueCardsByDeck || {});
       } else {
-        if (result.message === 'User not logged in') {
+        if (result.message === 'User not logged in' || result.message === 'User not logged in. Please log in to study decks.') { // Handle both messages
           // If not logged in, redirect to login
-          showLoginForm();
+          handleLogout(); // Perform full logout client-side reset
           showError('Your session has expired. Please log in again.');
         } else {
           handleError(result.message || 'Unknown error occurred');
@@ -172,11 +205,20 @@ function loadDeckList() {
       hideLoadingIndicator();
     })
     .withFailureHandler(function(error) {
-      handleError(error ? error.toString() : 'Unknown error occurred');
+      const errorMessage = error && error.message ? error.message : (error ? error.toString() : 'Unknown error occurred');
+      handleError(errorMessage);
       hideLoadingIndicator();
       
-      // If there's a critical error, show login form as fallback
-      showLoginForm();
+      // If there's a critical error (like auth failure), show login form as fallback
+      // Check for specific error messages that imply an auth issue
+      if (errorMessage.toLowerCase().includes('authorization') || errorMessage.toLowerCase().includes('logged in')) {
+        handleLogout(); // Perform full logout client-side reset
+      } else {
+        // For other errors, it might be better to stay on the current view or show a generic error page
+        // instead of forcefully logging out. For now, maintaining previous behavior to show login.
+        // Consider if this is the best UX for all failure types.
+        // showLoginForm(); // This was the previous implicit behavior
+      }
     })
     .getUserDueCards();
 }
@@ -205,13 +247,15 @@ function displayDeckList(decks, dueCardsByDeck) {
   `;
   
   if (decks.length === 0) {
-    html += `<p>No flashcard decks available. Please contact an administrator.</p>`;
+    html += `<p>No flashcard decks available. Please contact an administrator or create one if you are an admin.</p>`;
   } else {
     decks.forEach(deckName => {
       const deckStats = dueCardsByDeck[deckName] || { totalCards: 0, dueCards: 0 };
+      // Ensure deckName is escaped if it can contain special characters, though less likely for sheet names.
+      // Using template literals, variables are automatically handled unless part of raw HTML attributes.
       html += `
-        <div class="deck-card" data-deck="${deckName}">
-          <div class="deck-title">${deckName}</div>
+        <div class="deck-card" data-deck="${escapeHtml(deckName)}">
+          <div class="deck-title">${escapeHtml(deckName)}</div>
           <div class="deck-stats">
             <span>${deckStats.dueCards || 0} cards due</span>
             <span>${deckStats.totalCards || 0} total</span>
@@ -244,15 +288,23 @@ function displayDeckList(decks, dueCardsByDeck) {
 /**
  * Handle general errors
  * 
- * @param {string} errorMsg - Error message
+ * @param {string | Error | Object} errorMsg - Error message, Error object, or object with message property
  */
 function handleError(errorMsg) {
   hideLoadingIndicator();
   
-  // Default message if none provided
-  errorMsg = errorMsg || 'An unknown error occurred';
-  
-  console.error('Error:', errorMsg);
+  let message;
+  if (typeof errorMsg === 'string') {
+    message = errorMsg;
+  } else if (errorMsg && typeof errorMsg.message === 'string') {
+    message = errorMsg.message;
+  } else if (errorMsg && typeof errorMsg.toString === 'function') {
+    message = errorMsg.toString();
+  } else {
+    message = 'An unknown error occurred';
+  }
+
+  console.error('Error:', message, errorMsg); // Log original error too
   
   // Show error notification
   const notification = document.createElement('div');
@@ -260,7 +312,7 @@ function handleError(errorMsg) {
   notification.innerHTML = `
     <div class="notification-content">
       <span class="material-icons">error</span>
-      <span>${errorMsg}</span>
+      <span>${escapeHtml(message)}</span>
     </div>
     <button class="notification-close">
       <span class="material-icons">close</span>
@@ -322,7 +374,7 @@ function showSuccess(message) {
   notification.innerHTML = `
     <div class="notification-content">
       <span class="material-icons">check_circle</span>
-      <span>${message}</span>
+      <span>${escapeHtml(message)}</span>
     </div>
     <button class="notification-close">
       <span class="material-icons">close</span>
@@ -348,31 +400,33 @@ function showSuccess(message) {
 }
 
 /**
- * Show an error message to the user
+ * Show an error message to the user (now just an alias for handleError)
  * 
  * @param {string} message - Error message
  */
 function showError(message) {
-  // Use handleError for consistency
   handleError(message);
 }
 
 /**
  * Helper function to escape HTML special characters
  * 
- * @param {string} str - String to escape
+ * @param {any} str - String to escape. If not a string, will be converted.
  * @return {string} Escaped string
  */
 function escapeHtml(str) {
   if (typeof str !== 'string') {
-    return '';
+    if (str === null || typeof str === 'undefined') {
+        return '';
+    }
+    str = String(str);
   }
   
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
+    .replace(/'/g, '&#39;');
 }
 </script>

@@ -20,11 +20,10 @@
     <?!= include('client/auth.html'); ?>
     <?!= include('client/flashcards.html'); ?>
 
-    <!-- Include admin JavaScript if user is admin -->
-    <? if (data.isAdmin) { ?>
-      <?!= include('client/admin.html'); ?>
-      <?!= include('client/dictionary.html'); ?>
-    <? } ?>
+    <!-- Always include admin and dictionary JavaScript for function definitions -->
+    <?!= include('client/admin.html'); ?>
+    <?!= include('client/dictionary.html'); ?>
+
   </head>
   <body>
     <div class="app-container">
@@ -35,9 +34,8 @@
         <div class="user-info" id="userInfo" style="display: <?= data.isLoggedIn ? 'flex' : 'none' ?>;">
           <span>Welcome, <?= data.userName ?></span>
           <button id="logoutBtn" class="btn-text">Logout</button>
-          <? if (data.isAdmin) { ?>
-          <button id="adminPanelBtn" class="btn-text">Admin Panel</button>
-          <? } ?>
+          <!-- Admin Panel button is always rendered if logged in, visibility controlled by data.isAdmin and JS -->
+          <button id="adminPanelBtn" class="btn-text" style="display: <?= data.isAdmin ? 'block' : 'none' ?>;">Admin Panel</button>
         </div>
       </header>
 
@@ -74,9 +72,9 @@
     <?!= include('partials/login.html'); ?>
     <?!= include('partials/flashcardView.html'); ?>
     <?!= include('partials/deckList.html'); ?>
-    <? if (data.isAdmin) { ?>
-      <?!= include('partials/adminPanel.html'); ?>
-      <?!= include('partials/dictionaryLookup.html'); ?>
-    <? } ?>
+    <!-- Always include admin and dictionary partials (templates) for later use by JS -->
+    <?!= include('partials/adminPanel.html'); ?>
+    <?!= include('partials/dictionaryLookup.html'); ?>
+
   </body>
 </html>
