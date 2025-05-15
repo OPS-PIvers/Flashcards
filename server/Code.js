@@ -12,7 +12,14 @@ function doGet(e) {
 
     // Get user session info if available
     const userSession = getUserSession(); // From Authentication.js
-
+    // Add these lines for detailed session logging:
+    if (userSession) {
+      Logger.log(`doGet: User session found. Content: ${JSON.stringify(userSession)}`);
+      Logger.log(`doGet: userSession.isAdmin value: ${userSession.isAdmin}, type: ${typeof userSession.isAdmin}`);
+      Logger.log(`doGet: userSession.isValid value: ${userSession.isValid}, type: ${typeof userSession.isValid}`);
+    } else {
+      Logger.log('doGet: No user session found.');
+    }
     // Prepare template data
     const templateData = {
       title: 'Flashcard App Deluxe', // Updated title

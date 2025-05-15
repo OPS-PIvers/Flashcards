@@ -59,13 +59,13 @@
     <!-- Initialize App -->
     <script>
       document.addEventListener('DOMContentLoaded', function() {
-        // The loading indicator is initially hidden. 
+        // The loading indicator is initially hidden.
         // initApp will call functions that use show/hideLoadingIndicator.
         initApp({
-          isLoggedIn: <?= Boolean(data.isLoggedIn) ? 'true' : 'false' ?>,
-          isAdmin: <?= Boolean(data.isAdmin) ? 'true' : 'false' ?>,
+          isLoggedIn: <?= data.isLoggedIn ? 'true' : 'false' ?>,
+          isAdmin: <?= data.isAdmin ? 'true' : 'false' ?>,
           userName: "<?= data.userName || '' ?>",
-          initialPage: '<?= data.page ?>'
+          initialPage: "<?= data.page ?>"
         });
       });
     </script>
