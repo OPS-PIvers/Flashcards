@@ -44,14 +44,18 @@ function authenticateUser(username, password) {
     // Log the raw IsAdmin value from the sheet
     Logger.log(`authenticateUser: For user "${username}", raw user.IsAdmin value from sheet: "${user.IsAdmin}", type: ${typeof user.IsAdmin}`);
 
-    // Determine isAdmin status more robustly
+    // Determine isAdmin status more robustly - improved detection logic
     let isAdmin = false;
     if (typeof user.IsAdmin === 'boolean') {
       isAdmin = user.IsAdmin; // Directly use the boolean value
     } else if (typeof user.IsAdmin === 'string') {
-      isAdmin = user.IsAdmin.trim().toUpperCase() === 'TRUE'; // Handle string "TRUE" (case-insensitive)
+      // Handle string values case-insensitively
+      const adminString = user.IsAdmin.trim().toUpperCase();
+      isAdmin = adminString === 'TRUE' || adminString === 'YES' || adminString === '1';
+    } else if (typeof user.IsAdmin === 'number') {
+      // Handle numeric values (1 = true, anything else = false)
+      isAdmin = user.IsAdmin === 1;
     }
-    // Add any other specific checks if needed, e.g., for numbers 1/0
 
     Logger.log(`authenticateUser: For user "${username}", calculated isAdmin for session: ${isAdmin}, type: ${typeof isAdmin}`);
 
@@ -59,10 +63,13 @@ function authenticateUser(username, password) {
       userName: user.UserName,
       firstName: user.StudentFirst,
       lastName: user.StudentLast,
-      isAdmin: isAdmin, // Use the robustly determined isAdmin value
+      isAdmin: Boolean(isAdmin), // Force to boolean type for consistency
       lastLogin: new Date().toISOString(),
       isValid: true
     };
+
+    // Log session data before setting
+    Logger.log(`Setting session data for user "${username}": ${JSON.stringify(sessionData)}`);
 
     setUserSession(sessionData);
     Logger.log(`User logged in successfully: ${username}, Admin: ${isAdmin}. Session data set: ${JSON.stringify(sessionData)}`);
@@ -74,7 +81,7 @@ function authenticateUser(username, password) {
         userName: user.UserName,
         firstName: user.StudentFirst,
         lastName: user.StudentLast,
-        isAdmin: isAdmin // Return the correct isAdmin status
+        isAdmin: Boolean(isAdmin) // Force to boolean type for consistency
       }
     };
   } catch (error) {
@@ -90,10 +97,17 @@ function authenticateUser(username, password) {
  */
 function setUserSession(sessionData) {
   try {
+    // Validation to ensure isAdmin is explicitly a boolean
+    if (sessionData && 'isAdmin' in sessionData) {
+      sessionData.isAdmin = Boolean(sessionData.isAdmin);
+    }
+    
     const userProperties = PropertiesService.getUserProperties();
-    userProperties.setProperty('session', JSON.stringify(sessionData));
+    const sessionJson = JSON.stringify(sessionData);
+    userProperties.setProperty('session', sessionJson);
+    Logger.log(`Session data set successfully: ${sessionJson}`);
   } catch (e) {
-    Logger.log(`Failed to set user session: ${e.message}`);
+    Logger.log(`Failed to set user session: ${e.message}\nStack: ${e.stack}`);
     // Depending on severity, you might want to throw this error
     // or handle it by returning a failure from the calling function.
   }
@@ -109,20 +123,45 @@ function getUserSession() {
   const sessionJson = userProperties.getProperty('session');
 
   if (!sessionJson) {
+    Logger.log("getUserSession: No session found in UserProperties");
     return null;
   }
 
   try {
     const session = JSON.parse(sessionJson);
+    
     // Basic validation of session object structure
-    if (session && typeof session.userName === 'string' && typeof session.isValid === 'boolean' && typeof session.isAdmin === 'boolean') { // Added isAdmin check
-        return session;
+    if (!session || typeof session !== 'object') {
+      Logger.log(`getUserSession: Invalid session format, not an object: ${sessionJson}`);
+      userProperties.deleteProperty('session');
+      return null;
     }
-    Logger.log(`Invalid session structure found in UserProperties: ${JSON.stringify(session)}. Deleting.`);
-    userProperties.deleteProperty('session'); // Clear invalid session
-    return null;
+    
+    // Check for required properties
+    if (typeof session.userName !== 'string') {
+      Logger.log(`getUserSession: Invalid session - userName missing or not a string: ${sessionJson}`);
+      userProperties.deleteProperty('session');
+      return null;
+    }
+    
+    if (typeof session.isValid !== 'boolean') {
+      Logger.log(`getUserSession: Invalid session - isValid missing or not a boolean: ${sessionJson}`);
+      userProperties.deleteProperty('session');
+      return null;
+    }
+    
+    // Force isAdmin to be a boolean regardless of how it was stored
+    if ('isAdmin' in session) {
+      session.isAdmin = Boolean(session.isAdmin);
+    } else {
+      Logger.log(`getUserSession: isAdmin missing in session, setting to false: ${sessionJson}`);
+      session.isAdmin = false;
+    }
+    
+    Logger.log(`getUserSession: Retrieved valid session for user ${session.userName}, isAdmin=${session.isAdmin}`);
+    return session;
   } catch (error) {
-    Logger.log(`Error parsing session from UserProperties: ${error.message}. Deleting session property.`);
+    Logger.log(`Error parsing session from UserProperties: ${error.message}. Session data: ${sessionJson}. Deleting session property.`);
     userProperties.deleteProperty('session'); // Clear corrupted session
     return null;
   }
@@ -140,7 +179,7 @@ function logoutUser() {
     if (sessionJson) { // Check if sessionJson is not null
         try {
             const parsedSession = JSON.parse(sessionJson); // To log which user is logging out
-            Logger.log(`User logging out: ${parsedSession.userName}`);
+            Logger.log(`User logging out: ${parsedSession.userName}, isAdmin=${parsedSession.isAdmin}`);
         } catch (e) {
             Logger.log(`Could not parse session during logout, but proceeding to delete. Error: ${e.message}`);
         }
@@ -171,9 +210,20 @@ function isUserLoggedIn() {
  */
 function isUserAdmin() {
   const session = getUserSession();
-  // Logger.log(`isUserAdmin check: Session content: ${JSON.stringify(session)}`); // Can be verbose, enable if needed
-  const isAdminResult = session && session.isValid === true && session.isAdmin === true;
-  // Logger.log(`isUserAdmin check: Result: ${isAdminResult}`);
+  if (!session) {
+    Logger.log('isUserAdmin check: No valid session found');
+    return false;
+  }
+  
+  // Explicitly debug the session properties
+  Logger.log(`isUserAdmin check: Session content: isValid=${session.isValid}, isAdmin=${session.isAdmin}, type of isAdmin=${typeof session.isAdmin}`);
+  
+  // Ensure both isValid and isAdmin are treated as booleans
+  const isValidSession = Boolean(session.isValid);
+  const hasAdminRole = Boolean(session.isAdmin);
+  
+  const isAdminResult = isValidSession && hasAdminRole;
+  Logger.log(`isUserAdmin check: Final result=${isAdminResult}`);
   return isAdminResult;
 }
 
@@ -193,6 +243,6 @@ function getCurrentUserInfo() {
     userName: session.userName,
     firstName: session.firstName,
     lastName: session.lastName,
-    isAdmin: session.isAdmin // This now reflects the session's isAdmin value
+    isAdmin: Boolean(session.isAdmin) // Force boolean type for consistency
   };
 }

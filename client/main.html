@@ -11,12 +11,24 @@ function initApp(options) {
   // Store app state with defensive initialization
   window.app = {
     isLoggedIn: Boolean(options.isLoggedIn),
-    isAdmin: Boolean(options.isAdmin),
+    isAdmin: Boolean(options.isAdmin), // Explicitly convert to boolean
     userName: options.userName || '',
     currentDeck: null,
     currentCards: [],
     currentCardIndex: 0
   };
+  
+  console.log('App initialized with options:', {
+    isLoggedIn: options.isLoggedIn,
+    isAdmin: options.isAdmin,
+    userName: options.userName
+  });
+  
+  console.log('window.app state:', {
+    isLoggedIn: window.app.isLoggedIn,
+    isAdmin: window.app.isAdmin,
+    userName: window.app.userName
+  });
   
   // Setup event listeners
   setupEventListeners();
@@ -27,6 +39,9 @@ function initApp(options) {
     // The button should only be visible if the user is logged in (handled by parent 'userInfo' div visibility)
     // AND is an admin.
     adminButton.style.display = window.app.isAdmin ? 'block' : 'none';
+    console.log(`Admin button visibility set to: ${window.app.isAdmin ? 'visible' : 'hidden'}`);
+  } else {
+    console.warn('Admin panel button element not found!');
   }
   
   // Load initial page - with proper authentication checking
@@ -69,6 +84,9 @@ function setupEventListeners() {
   const adminPanelBtn = document.getElementById('adminPanelBtn');
   if (adminPanelBtn) {
     adminPanelBtn.addEventListener('click', loadAdminPanel);
+    console.log('Admin panel button event listener attached');
+  } else {
+    console.warn('Admin panel button not found during event listener setup');
   }
 }
 
@@ -423,10 +441,10 @@ function escapeHtml(str) {
   }
   
   return str
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
 </script>
