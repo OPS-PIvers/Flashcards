@@ -238,7 +238,15 @@ function testDictionaryIntegration(word) {
  */
 function addDictionaryContentToCard(deckName, cardId, word) {
   try {
-    if (!isUserAdmin()) { // Assumes isUserAdmin is defined elsewhere (e.g., Authentication.js)
+    // CRITICAL FIX: Use direct admin check instead of isUserAdmin()
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'You must be logged in to modify cards.' };
+    }
+    
+    // Use the forceAdminCheck function from AdminTools.js
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Admin access required to modify cards.' };
     }
 
@@ -387,7 +395,15 @@ function escapeHtml(str) {
  */
 function previewDictionaryContent(word) {
   try {
-    if (!isUserAdmin()) { // Assumes isUserAdmin is defined elsewhere
+    // CRITICAL FIX: Use direct admin check instead of isUserAdmin()
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'You must be logged in to use dictionary tools.' };
+    }
+    
+    // Use the forceAdminCheck function from AdminTools.js
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Admin access required to use dictionary tools.' };
     }
 
