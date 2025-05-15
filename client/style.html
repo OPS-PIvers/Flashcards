@@ -153,6 +153,11 @@
     text-decoration: underline;
   }
 
+  .btn-sm {
+    font-size: 0.75rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
   /* Forms */
   .form-group {
     margin-bottom: var(--spacing-md);
@@ -182,6 +187,30 @@
     display: flex;
     gap: var(--spacing-md);
     margin-top: var(--spacing-md);
+  }
+
+  /* Input with button styling */
+  .input-with-button {
+    display: flex;
+    gap: 10px;
+  }
+
+  .input-with-button .form-control {
+    flex: 1;
+  }
+
+  .input-with-button .btn {
+    align-self: flex-start;
+    white-space: nowrap;
+  }
+
+  /* Preview container for dictionary content */
+  .preview-container {
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 5px;
   }
 
   /* Loading indicator */
@@ -413,11 +442,24 @@
   /* Dictionary integration styles */
   .input-with-button {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: 10px;
   }
 
   .input-with-button .form-control {
     flex: 1;
+  }
+
+  .input-with-button .btn {
+    align-self: flex-start;
+    white-space: nowrap;
+  }
+
+  .preview-container {
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 5px;
   }
 
   .result-card {
@@ -571,6 +613,15 @@
 
     .rating-btn {
       flex: 1 1 40%;
+    }
+
+    .input-with-button {
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .input-with-button .btn {
+      width: 100%;
     }
   }
 
