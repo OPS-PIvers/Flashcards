@@ -12,24 +12,38 @@ function doGet(e) {
 
     // Get user session info if available
     const userSession = getUserSession(); // From Authentication.js
+    
+    // IMPORTANT: Force full logout if session is invalid/corrupt
+    if (userSession && (!userSession.userName || userSession.userName === '')) {
+      // Clear invalid session
+      PropertiesService.getUserProperties().deleteProperty('session');
+      Logger.log('Cleared invalid session with empty userName');
+      userSession = null;
+    }
+    
     // Add these lines for detailed session logging:
     if (userSession) {
       Logger.log(`doGet: User session found. Content: ${JSON.stringify(userSession)}`);
       Logger.log(`doGet: userSession.isAdmin value: ${userSession.isAdmin}, type: ${typeof userSession.isAdmin}`);
       Logger.log(`doGet: userSession.isValid value: ${userSession.isValid}, type: ${typeof userSession.isValid}`);
     } else {
-      Logger.log('doGet: No user session found.');
+      Logger.log('doGet: No user session found, user will see login screen');
     }
-    // Prepare template data
+    
+    // CRITICAL: Ensure boolean types for template data
+    const isLoggedIn = userSession !== null && userSession.isValid === true;
+    const isAdmin = isLoggedIn && userSession.isAdmin === true;
+    
+    // Ensure boolean values are cast to strings for template embedding
     const templateData = {
       title: 'Flashcard App Deluxe', // Updated title
-      isLoggedIn: userSession !== null && userSession.isValid === true,
-      isAdmin: userSession !== null && userSession.isValid === true && userSession.isAdmin === true,
-      userName: userSession !== null && userSession.isValid === true ? userSession.userName : '',
+      isLoggedIn: isLoggedIn.toString(), // Force to string 'true' or 'false'
+      isAdmin: isAdmin.toString(), // Force to string 'true' or 'false'
+      userName: isLoggedIn ? userSession.userName : '',
       page: page // This could be used for deep linking if client-side routing supported it more directly
     };
     
-    Logger.log(`Serving page for user: ${templateData.userName || 'Guest'}, Admin: ${templateData.isAdmin}, LoggedIn: ${templateData.isLoggedIn}`);
+    Logger.log(`Serving page with template data: ${JSON.stringify(templateData)}`);
 
     // Create and return the HTML output from the main 'index.html' template
     const template = HtmlService.createTemplateFromFile('client/index.html'); // Main template file

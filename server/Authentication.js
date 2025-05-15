@@ -230,3 +230,47 @@ function getCurrentUserInfo() {
     isAdmin: Boolean(session.isAdmin) // Force boolean type for consistency
   };
 }
+
+/**
+ * Force-checks the session to ensure it's valid
+ * This can be called before critical operations
+ * 
+ * @return {boolean} True if session is valid and user is logged in
+ */
+function validateSession() {
+  try {
+    const userProperties = PropertiesService.getUserProperties();
+    const sessionJson = userProperties.getProperty('session');
+    
+    if (!sessionJson) {
+      Logger.log("validateSession: No session property found");
+      return false;
+    }
+    
+    try {
+      const session = JSON.parse(sessionJson);
+      
+      // Check for required session properties
+      if (!session || typeof session !== 'object' || 
+          typeof session.userName !== 'string' || session.userName === '' ||
+          typeof session.isValid !== 'boolean' || session.isValid !== true) {
+        
+        Logger.log(`validateSession: Invalid session format: ${sessionJson}`);
+        // Clean up invalid session
+        userProperties.deleteProperty('session');
+        return false;
+      }
+      
+      Logger.log(`validateSession: Session valid for user ${session.userName}, isAdmin=${Boolean(session.isAdmin)}`);
+      return true;
+    } catch (parseError) {
+      Logger.log(`validateSession: Error parsing session JSON: ${parseError.message}`);
+      // Clean up corrupt session data
+      userProperties.deleteProperty('session');
+      return false;
+    }
+  } catch (error) {
+    Logger.log(`Error in validateSession: ${error.message}`);
+    return false;
+  }
+}

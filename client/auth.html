@@ -19,11 +19,22 @@
     
     google.script.run
       .withSuccessHandler(function(result) {
+        console.log('Login result:', result);
+        
         if (result.success) {
+          // IMPORTANT: Ensure boolean values, not strings
+          const isAdmin = result.user.isAdmin === true || result.user.isAdmin === 'true';
+          
           // Update app state
           window.app.isLoggedIn = true;
-          window.app.isAdmin = result.user.isAdmin;
+          window.app.isAdmin = isAdmin;
           window.app.userName = result.user.userName;
+          
+          console.log('Updated app state after login:', {
+            isLoggedIn: window.app.isLoggedIn,
+            isAdmin: window.app.isAdmin,
+            userName: window.app.userName
+          });
           
           // Show user info
           const userInfo = document.getElementById('userInfo');
@@ -33,7 +44,8 @@
           // Show admin button if applicable
           const adminBtn = document.getElementById('adminPanelBtn');
           if (adminBtn) {
-            adminBtn.style.display = result.user.isAdmin ? 'block' : 'none';
+            adminBtn.style.display = isAdmin ? 'block' : 'none';
+            console.log(`Setting admin button visibility to: ${isAdmin ? 'visible' : 'hidden'}`);
           }
           
           // Load deck list
@@ -51,7 +63,11 @@
         
         hideLoadingIndicator();
       })
-      .withFailureHandler(handleError)
+      .withFailureHandler(function(error) {
+        console.error('Login error:', error);
+        handleError(error.message || 'Error logging in. Please try again.');
+        hideLoadingIndicator();
+      })
       .authenticateUser(username, password);
   }
   
