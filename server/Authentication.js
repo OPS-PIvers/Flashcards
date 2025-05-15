@@ -10,10 +10,12 @@
  * @param {string} password - The password
  * @return {Object} Authentication result
  */
+// In server/Authentication.js - Update the authenticateUser function
+
 function authenticateUser(username, password) {
   try {
     // Check if the app is initialized
-    if (!isAppInitialized()) { // Assumes isAppInitialized is defined (e.g., in Code.js)
+    if (!isAppInitialized()) {
       return {
         success: false,
         message: 'Application needs to be initialized by an administrator.',
@@ -22,84 +24,39 @@ function authenticateUser(username, password) {
     }
 
     // Get user data
-    const user = getUserData(username); // Assumes getUserData is defined (e.g., in Database.js)
-    if (user) {
-      // Force admin status check directly from spreadsheet
-      Logger.log(`Forcing admin status check for ${username}`);
-      try {
-        const ss = getDatabaseSpreadsheet();
-        const configSheet = ss.getSheetByName('Config');
-        const headers = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
-        const isAdminColIndex = headers.indexOf('IsAdmin');
-        const usernameColIndex = headers.indexOf('UserName');
-        
-        if (isAdminColIndex !== -1 && usernameColIndex !== -1) {
-          const allData = configSheet.getDataRange().getValues();
-          for (let i = 1; i < allData.length; i++) {
-            if (allData[i][usernameColIndex] === username) {
-              // Get the actual cell to use isChecked() method
-              const isAdminCell = configSheet.getRange(i+1, isAdminColIndex+1);
-              const isChecked = isAdminCell.isChecked();
-              Logger.log(`CRITICAL: For ${username}, IsAdmin checkbox is ${isChecked ? 'CHECKED' : 'UNCHECKED'}`);
-              user.IsAdmin = isChecked; // Override with direct checkbox state
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        Logger.log(`Error in direct admin check: ${e.message}`);
-        // Continue with existing user object if this fails
-      }
-    }
+    const user = getUserData(username);
+
     // Check if user exists
     if (!user) {
       Logger.log(`Login attempt failed: User not found - ${username}`);
-      return { success: false, message: 'Invalid username or password.' }; // Generic message for security
+      return { success: false, message: 'Invalid username or password.' };
     }
 
     // Check if password matches
-    // !!! SECURITY WARNING: Storing and comparing plain text passwords is not secure.
-    // Consider implementing password hashing for any production or sensitive environment.
     if (user.Password !== password) {
       Logger.log(`Login attempt failed: Incorrect password for user - ${username}`);
-      return { success: false, message: 'Invalid username or password.' }; // Generic message
+      return { success: false, message: 'Invalid username or password.' };
     }
 
     // Update last login time
-    updateUserLastLogin(username); // Assumes updateUserLastLogin is defined (e.g., in Database.js)
+    updateUserLastLogin(username);
 
-    // Log the raw IsAdmin value from the sheet
-    Logger.log(`authenticateUser: For user "${username}", raw user.IsAdmin value from sheet: "${user.IsAdmin}", type: ${typeof user.IsAdmin}`);
+    // CRITICAL FIX: Directly check admin status from the sheet instead of relying on user object
+    const isAdminFromSheet = isUserAdminInSheet(username);
+    Logger.log(`authenticateUser: Direct admin check from sheet for ${username}: ${isAdminFromSheet}`);
 
-    // Determine isAdmin status more robustly - improved detection logic
-    let isAdmin = false;
-    if (typeof user.IsAdmin === 'boolean') {
-      isAdmin = user.IsAdmin; // Directly use the boolean value
-    } else if (typeof user.IsAdmin === 'string') {
-      // Handle string values case-insensitively
-      const adminString = user.IsAdmin.trim().toUpperCase();
-      isAdmin = adminString === 'TRUE' || adminString === 'YES' || adminString === '1';
-    } else if (typeof user.IsAdmin === 'number') {
-      // Handle numeric values (1 = true, anything else = false)
-      isAdmin = user.IsAdmin === 1;
-    }
-
-    Logger.log(`authenticateUser: For user "${username}", calculated isAdmin for session: ${isAdmin}, type: ${typeof isAdmin}`);
-
+    // Use the direct result from the sheet
     const sessionData = {
       userName: user.UserName,
       firstName: user.StudentFirst,
       lastName: user.StudentLast,
-      isAdmin: Boolean(isAdmin), // Force to boolean type for consistency
+      isAdmin: isAdminFromSheet, // Use direct check result
       lastLogin: new Date().toISOString(),
       isValid: true
     };
 
-    // Log session data before setting
-    Logger.log(`Setting session data for user "${username}": ${JSON.stringify(sessionData)}`);
-
     setUserSession(sessionData);
-    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdmin}. Session data set: ${JSON.stringify(sessionData)}`);
+    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdminFromSheet}. Session data set: ${JSON.stringify(sessionData)}`);
 
     return {
       success: true,
@@ -108,7 +65,7 @@ function authenticateUser(username, password) {
         userName: user.UserName,
         firstName: user.StudentFirst,
         lastName: user.StudentLast,
-        isAdmin: Boolean(isAdmin) // Force to boolean type for consistency
+        isAdmin: isAdminFromSheet // Use direct check result
       }
     };
   } catch (error) {
