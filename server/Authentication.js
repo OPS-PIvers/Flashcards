@@ -42,7 +42,13 @@ function authenticateUser(username, password) {
     updateUserLastLogin(username); // Assumes updateUserLastLogin is defined (e.g., in Database.js)
 
     // Set user session
+    Logger.log(`authenticateUser: For user "${username}", user.IsAdmin value from sheet: "${user.IsAdmin}", type: ${typeof user.IsAdmin}`);
+
     const isAdmin = user.IsAdmin === 'TRUE' || user.IsAdmin === true;
+
+    // ADD THIS LOGGING:
+    Logger.log(`authenticateUser: For user "${username}", calculated isAdmin for session: ${isAdmin}, type: ${typeof isAdmin}`);
+
     const sessionData = {
       userName: user.UserName,
       firstName: user.StudentFirst,

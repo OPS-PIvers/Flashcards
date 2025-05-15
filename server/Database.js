@@ -67,7 +67,7 @@ function setupConfigSheet(sheet) {
 
   const adminUser = [
     'Admin', 'User', 'admin', 'password', 
-    'TRUE', 
+    true, 
     new Date(), 
     '', 
     '', 
