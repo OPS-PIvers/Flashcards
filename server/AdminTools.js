@@ -13,12 +13,129 @@
  * @return {Object} Admin access information
  */
 function getAdminAccess() {
-  const isAdmin = isUserAdmin(); // Relies on global isUserAdmin() from Authentication.js
-  return {
-    success: true,
-    isAdmin: isAdmin,
-    message: isAdmin ? 'Admin access verified.' : 'Admin access required. You do not have sufficient permissions.'
-  };
+  // CRITICAL FIX: Direct admin check, bypassing isUserAdmin() which might be unreliable
+  try {
+    // Get current user's session
+    const userProperties = PropertiesService.getUserProperties();
+    const sessionJson = userProperties.getProperty('session');
+    
+    if (!sessionJson) {
+      Logger.log("getAdminAccess: No session found");
+      return {
+        success: true,
+        isAdmin: false,
+        message: 'Admin access required. You need to log in first.'
+      };
+    }
+    
+    const session = JSON.parse(sessionJson);
+    
+    Logger.log(`getAdminAccess: Session data: ${JSON.stringify(session)}`);
+    
+    if (!session || typeof session !== 'object' || !session.isValid) {
+      Logger.log("getAdminAccess: Invalid session");
+      return {
+        success: true,
+        isAdmin: false,
+        message: 'Admin access required. Invalid session.'
+      };
+    }
+    
+    // Get username from session
+    const username = session.userName;
+    if (!username) {
+      Logger.log("getAdminAccess: No username in session");
+      return {
+        success: true,
+        isAdmin: false,
+        message: 'Admin access required. Invalid username.'
+      };
+    }
+    
+    // CRITICAL FIX: Force direct check from the Config sheet
+    const isAdmin = forceAdminCheck(username);
+    Logger.log(`getAdminAccess: Direct admin check result for ${username}: ${isAdmin}`);
+    
+    return {
+      success: true,
+      isAdmin: isAdmin,
+      message: isAdmin ? 'Admin access verified.' : 'Admin access required. You do not have sufficient permissions.'
+    };
+  } catch (error) {
+    Logger.log(`Error in getAdminAccess: ${error.message}\nStack: ${error.stack}`);
+    return {
+      success: false, 
+      isAdmin: false,
+      message: `Error checking admin access: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Force direct check of admin status from the Config sheet
+ * This bypasses any cached session data or existing admin checks
+ * 
+ * @param {string} username - User to check
+ * @return {boolean} True if user is admin, false otherwise
+ */
+function forceAdminCheck(username) {
+  try {
+    const ss = getDatabaseSpreadsheet();
+    const configSheet = ss.getSheetByName('Config');
+    
+    if (!configSheet) {
+      Logger.log("CRITICAL: Config sheet not found during force admin check");
+      return false;
+    }
+    
+    // Get header row to find column positions
+    const headerRow = configSheet.getRange(1, 1, 1, configSheet.getLastColumn()).getValues()[0];
+    const usernameCol = headerRow.indexOf('UserName');
+    const isAdminCol = headerRow.indexOf('IsAdmin');
+    
+    if (usernameCol === -1 || isAdminCol === -1) {
+      Logger.log(`forceAdminCheck: Couldn't find UserName or IsAdmin columns. Found: UserName=${usernameCol}, IsAdmin=${isAdminCol}`);
+      return false;
+    }
+    
+    // Get all data
+    const allData = configSheet.getDataRange().getValues();
+    
+    // Look for user
+    for (let i = 1; i < allData.length; i++) {
+      const row = allData[i];
+      if (row[usernameCol] && row[usernameCol].toString() === username) {
+        // Found user, check admin status
+        // Try all possible ways the checkbox might be stored
+        const isAdminValue = row[isAdminCol];
+        
+        // Get direct cell for isChecked() method
+        const isAdminCell = configSheet.getRange(i+1, isAdminCol+1);
+        let isChecked = false;
+        try {
+          isChecked = isAdminCell.isChecked();
+          Logger.log(`forceAdminCheck: isChecked() method result for ${username}: ${isChecked}`);
+        } catch (e) {
+          Logger.log(`forceAdminCheck: isChecked() failed: ${e.message}`);
+        }
+        
+        // Try all possible ways a checkbox can be represented
+        const isAdmin = isAdminValue === true || 
+                      String(isAdminValue).toUpperCase() === 'TRUE' ||
+                      isAdminValue === 1 ||
+                      isChecked === true;
+        
+        Logger.log(`forceAdminCheck: Found user ${username} in row ${i+1}. IsAdmin value = ${isAdminValue} (${typeof isAdminValue}). Final determination: ${isAdmin}`);
+        return isAdmin;
+      }
+    }
+    
+    Logger.log(`forceAdminCheck: User ${username} not found in Config sheet`);
+    return false;
+  } catch (error) {
+    Logger.log(`Error in forceAdminCheck: ${error.message}\nStack: ${error.stack}`);
+    return false;
+  }
 }
 
 /**
@@ -30,7 +147,14 @@ function getAdminAccess() {
  */
 function createDeck(deckName) {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to create decks.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can create decks.' };
     }
 
@@ -82,7 +206,14 @@ function createDeck(deckName) {
  */
 function addFlashcard(deckName, cardData) {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to add flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can add flashcards.' };
     }
 
@@ -129,7 +260,14 @@ function addFlashcard(deckName, cardData) {
  */
 function getUsers() {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to view user lists.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can view user lists.' };
     }
 
@@ -176,7 +314,14 @@ function getUsers() {
  */
 function deleteFlashcard(deckName, cardId) {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to delete flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can delete flashcards.' };
     }
 
@@ -230,9 +375,17 @@ function deleteFlashcard(deckName, cardId) {
  */
 function updateFlashcard(deckName, cardId, cardData) {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to update flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can update flashcards.' };
     }
+    
     if (!cardData || !cardData.sideA || cardData.sideA.trim() === '' || !cardData.sideB || cardData.sideB.trim() === '') {
       return { success: false, message: 'Card Side A and Side B are required for update.' };
     }
@@ -298,7 +451,14 @@ function updateFlashcard(deckName, cardId, cardData) {
  */
 function deleteDeck(deckName) {
   try {
-    if (!isUserAdmin()) {
+    // CRITICAL FIX: Use session username for direct admin check
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to delete decks.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
       return { success: false, message: 'Permission denied: Only administrators can delete decks.' };
     }
 
