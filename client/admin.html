@@ -360,7 +360,7 @@ function loadAdminDeckList() {
         const sideC = escapeHtml(card.sideC || card.FlashcardSideC || ''); 
         
         // Extract study configuration 
-        let studyConfig = { showSideB: true, showSideC: true }; 
+        let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false }; 
         if (card.StudyConfig) {
           try {
             const parsedConfig = JSON.parse(card.StudyConfig);
@@ -383,7 +383,8 @@ function loadAdminDeckList() {
               ${sideC ? `<strong>Side C (raw):</strong> ${sideC}<br>` : ''}
               ${tags ? `<strong>Tags:</strong> ${tags}<br>` : ''}
               <strong>Study Config:</strong> Show Side B: ${studyConfig.showSideB ? 'Yes' : 'No'}, 
-              Show Side C: ${studyConfig.showSideC ? 'Yes' : 'No'}
+              Show Side C: ${studyConfig.showSideC ? 'Yes' : 'No'},
+              Autoplay Audio: ${studyConfig.autoplayAudio ? 'Yes' : 'No'}
             </div>
             <div class="admin-card-actions">
               <button class="btn btn-outline btn-sm" data-action="edit-card" data-card-id="${cardId}">Edit</button>
@@ -454,7 +455,7 @@ function loadAdminDeckList() {
                 <label for="studySideC">Show Side C on back</label>
               </div>
               <div class="checkbox-item">
-                <input type="checkbox" id="studyAutoplay" checked> 
+                <input type="checkbox" id="studyAutoplay"> 
                 <label for="studyAutoplay">Auto-play audio when card is flipped</label>
               </div>
             </div>
@@ -482,10 +483,13 @@ function loadAdminDeckList() {
       document.getElementById('newCardTags').value = '';
       document.getElementById('newCardSideB').removeAttribute('data-image-url');
       document.getElementById('newCardSideC').removeAttribute('data-audio-url');
+      document.getElementById('newCardSideA').removeAttribute('data-audio-url');
       document.getElementById('imagePreviewContainer').style.display = 'none';
       document.getElementById('audioPreviewContainer').style.display = 'none';
-      document.getElementById('studySideB').checked = true; // Reset to checked
-      document.getElementById('studySideC').checked = true; // Reset to checked
+      document.getElementById('audioPreviewContainerA').style.display = 'none';
+      document.getElementById('studySideB').checked = true; 
+      document.getElementById('studySideC').checked = true; 
+      document.getElementById('studyAutoplay').checked = false;
       document.getElementById('showAddCardFormBtn').style.display = 'inline-block';
     });
     document.getElementById('submitNewCardBtn').addEventListener('click', function() { addNewCardToDeck(deckName); });
@@ -529,6 +533,107 @@ function loadAdminDeckList() {
       });
     });
   }
+
+  /**
+   * Adds a new flashcard to the specified deck using data from the form.
+   * This function is called when the "Save Card" button in the "Add New Card" form is clicked.
+   * @param {string} deckName - The name of the deck to add the card to.
+   */
+  function addNewCardToDeck(deckName) {
+    // Get references to form input elements
+    const sideA_input = document.getElementById('newCardSideA');
+    const sideB_input = document.getElementById('newCardSideB');
+    const sideC_input = document.getElementById('newCardSideC');
+    const tags_input = document.getElementById('newCardTags');
+
+    // Get study configuration checkboxes
+    const showSideB_checkbox = document.getElementById('studySideB');
+    const showSideC_checkbox = document.getElementById('studySideC');
+    const autoplayAudio_checkbox = document.getElementById('studyAutoplay'); 
+
+    // Get values from the input fields
+    const sideA = sideA_input.value.trim();
+    const sideB = sideB_input.value.trim();
+    const sideC = sideC_input.value.trim();
+    const tags = tags_input.value.trim();
+
+    // Get boolean values from checkboxes
+    const showSideB = showSideB_checkbox.checked;
+    const showSideC = showSideC_checkbox.checked;
+    const autoplayAudio = autoplayAudio_checkbox ? autoplayAudio_checkbox.checked : false;
+
+    // Validate that Side A is not empty
+    if (!sideA) {
+      handleError('Side A is required for a new card.');
+      return;
+    }
+
+    // Retrieve multimedia URLs stored in dataset attributes (if any)
+    const imageUrl = sideB_input.dataset.imageUrl || null;
+    const audioUrlC = sideC_input.dataset.audioUrl || null;
+    const audioUrlA = sideA_input.dataset.audioUrl || null; 
+
+    // Prepare card data object for the server
+    const cardData = {
+      sideA: sideA,
+      sideB: sideB,
+      sideC: sideC,
+      tags: tags,
+      showSideB: showSideB,
+      showSideC: showSideC,
+      autoplayAudio: autoplayAudio
+    };
+
+    console.log('Adding new card with data:', cardData, 'Image:', imageUrl, 'AudioC:', audioUrlC, 'AudioA:', audioUrlA);
+    showLoadingIndicator(); 
+
+    // Call the server-side function to add the flashcard
+    google.script.run
+      .withSuccessHandler(function(result) {
+        hideLoadingIndicator(); 
+        if (result && result.success) {
+          showSuccess('New card added successfully!');
+          
+          // Clear the form fields and reset previews
+          sideA_input.value = '';
+          sideB_input.value = '';
+          sideC_input.value = '';
+          tags_input.value = '';
+          
+          showSideB_checkbox.checked = true;
+          showSideC_checkbox.checked = true;
+          if(autoplayAudio_checkbox) autoplayAudio_checkbox.checked = false;
+
+
+          sideB_input.removeAttribute('data-image-url');
+          sideC_input.removeAttribute('data-audio-url');
+          sideA_input.removeAttribute('data-audio-url');
+          
+          const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+          if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+          const audioPreviewContainer = document.getElementById('audioPreviewContainer');
+          if (audioPreviewContainer) audioPreviewContainer.style.display = 'none';
+          const audioPreviewContainerA = document.getElementById('audioPreviewContainerA');
+          if (audioPreviewContainerA) audioPreviewContainerA.style.display = 'none';
+          
+          const addCardFormContainer = document.getElementById('addCardFormContainer');
+          if (addCardFormContainer) addCardFormContainer.style.display = 'none';
+          const showAddCardFormBtn = document.getElementById('showAddCardFormBtn');
+          if (showAddCardFormBtn) showAddCardFormBtn.style.display = 'inline-block';
+          
+          showDeckEditor(deckName); 
+        } else {
+          handleError(result ? result.message : 'Failed to add new card.');
+        }
+      })
+      .withFailureHandler(function(err) {
+        hideLoadingIndicator(); 
+        handleError(err.message || 'An error occurred while adding the card.');
+      })
+      .addFlashcard(deckName, cardData, imageUrl, audioUrlC, audioUrlA); 
+  }
+
+
   /**
    * Handle dictionary lookup for a specific card, pre-filling dictionary tab.
    * @param {Object} card - The card object
@@ -574,146 +679,6 @@ function loadAdminDeckList() {
   }
 
   /**
-   * Updates an existing flashcard in a deck.
-   * Handles embedding of image and audio URLs into card data.
-   * Only accessible by admin users.
-   *
-   * @param {string} deckName - Name of the deck
-   * @param {string} cardId - ID of the flashcard to update
-   * @param {Object} cardData - Updated card data {sideA, sideB, sideC, tags, showSideB, showSideC, autoplayAudio}
-   * @param {string|null} imageUrlToEmbed - URL of the image to embed in Side B
-   * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C
-   * @param {string|null} audioUrlToEmbedSideA - URL of the audio to embed in Side A
-   * @return {Object} Result of operation {success: boolean, message: string}
-   */
-  function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlToEmbed, audioUrlToEmbedSideA) {
-    try {
-      const session = getUserSession();
-      if (!session || !session.userName) {
-        return { success: false, message: 'Permission denied: You must be logged in to update flashcards.' };
-      }
-      
-      const isAdmin = forceAdminCheck(session.userName);
-      if (!isAdmin) {
-        return { success: false, message: 'Permission denied: Only administrators can update flashcards.' };
-      }
-      
-      if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
-        return { success: false, message: 'Card Side A is required for update.' };
-      }
-
-      const ss = getDatabaseSpreadsheet();
-      const sheet = ss.getSheetByName(deckName);
-      if (!sheet) {
-        return { success: false, message: `Deck "${deckName}" not found.` };
-      }
-
-      const data = sheet.getDataRange().getValues();
-      const headers = data[0].map(h => String(h).trim());
-      const idIndex = headers.indexOf('FlashcardID');
-      const sideAIndex = headers.indexOf('FlashcardSideA');
-      const sideBIndex = headers.indexOf('FlashcardSideB');
-      const sideCIndex = headers.indexOf('FlashcardSideC');
-      const tagsIndex = headers.indexOf('Tags');
-      const studyConfigIndex = headers.indexOf('StudyConfig');
-
-      if (idIndex === -1 || sideAIndex === -1 || sideBIndex === -1 || sideCIndex === -1 || tagsIndex === -1) {
-        return { success: false, message: 'One or more required columns (FlashcardID, FlashcardSideA, FlashcardSideB, FlashcardSideC, Tags) not found in the deck.' };
-      }
-
-      let rowIndexToUpdate = -1;
-      for (let i = 1; i < data.length; i++) {
-        if (data[i][idIndex] === cardId) {
-          rowIndexToUpdate = i + 1;
-          break;
-        }
-      }
-
-      if (rowIndexToUpdate === -1) {
-        return { success: false, message: `Card ID "${cardId}" not found in deck "${deckName}" for update.` };
-      }
-
-      // Process Side A with audio if provided
-      let finalSideA = (cardData.sideA || '').trim();
-      if (audioUrlToEmbedSideA) {
-        const audioTagA = `[AUDIO:${audioUrlToEmbedSideA}]`;
-        if (!finalSideA.includes(audioTagA)) {
-          finalSideA = audioTagA + (finalSideA ? ' ' + finalSideA : '');
-        }
-      } else {
-        // Remove any existing audio tags from Side A text
-        finalSideA = finalSideA.replace(/\[AUDIO:[^\]]+\]\s*/gi, '').trim();
-      }
-
-      let currentSideB = sheet.getRange(rowIndexToUpdate, sideBIndex + 1).getValue() || '';
-      let currentSideC = sheet.getRange(rowIndexToUpdate, sideCIndex + 1).getValue() || '';
-
-      // Clear old media tags from current content before adding new/updated text
-      currentSideB = String(currentSideB).replace(/\[IMAGE:[^\]]+\]\s*/gi, '').trim();
-      currentSideC = String(currentSideC).replace(/\[AUDIO:[^\]]+\]\s*/gi, '').replace(/\[Source:[^\]]+\]\s*/gi, '').trim();
-      
-      // Prepend/Append user-provided text
-      let finalSideB = (cardData.sideB || '').trim();
-      let finalSideC = (cardData.sideC || '').trim();
-      
-      // If user text for SideB/SideC was provided, use it, otherwise use the cleaned current content
-      finalSideB = cardData.sideB !== undefined ? (cardData.sideB || '').trim() : currentSideB;
-      finalSideC = cardData.sideC !== undefined ? (cardData.sideC || '').trim() : currentSideC;
-
-      let sources = [];
-
-      if (imageUrlToEmbed) {
-        const imageTag = `[IMAGE:${imageUrlToEmbed}]`;
-        if (!finalSideB.includes(imageTag)) { // Avoid duplicate tags if user manually added one
-          finalSideB = imageTag + (finalSideB ? '\n' + finalSideB : '');
-        }
-        sources.push('Pixabay');
-      }
-
-      if (audioUrlToEmbed) {
-        const audioTag = `[AUDIO:${audioUrlToEmbed}]`;
-        if (!finalSideC.includes(audioTag)) {
-            finalSideC = finalSideC + (finalSideC ? '\n' : '') + audioTag;
-        }
-        sources.push('VoiceRSS');
-      }
-      
-      if (sources.length > 0) {
-          const sourceTag = `[Source: ${sources.join(', ')} for "${cardData.sideA.trim()}"]`;
-          if (!finalSideC.includes(sourceTag)) {
-              finalSideC = finalSideC + (finalSideC ? '\n' : '') + sourceTag;
-          }
-      }
-
-      sheet.getRange(rowIndexToUpdate, sideAIndex + 1).setValue(finalSideA.trim());
-      sheet.getRange(rowIndexToUpdate, sideBIndex + 1).setValue(finalSideB.trim());
-      sheet.getRange(rowIndexToUpdate, sideCIndex + 1).setValue(finalSideC.trim());
-      
-      const normalizedTags = (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(',');
-      sheet.getRange(rowIndexToUpdate, tagsIndex + 1).setValue(normalizedTags);
-      
-      // Update study configuration
-      if (studyConfigIndex !== -1) {
-        const showSideB = cardData.showSideB !== false;
-        const showSideC = cardData.showSideC !== false;
-        const autoplayAudio = cardData.autoplayAudio === true;
-        const studyConfig = JSON.stringify({
-          showSideB,
-          showSideC,
-          autoplayAudio
-        });
-        sheet.getRange(rowIndexToUpdate, studyConfigIndex + 1).setValue(studyConfig);
-      }
-
-      Logger.log(`Admin "${session.userName}" updated card "${cardId}" in deck: ${deckName} with media.`);
-      return { success: true, message: 'Flashcard updated successfully.' };
-    } catch (error) {
-      Logger.log(`Error in updateFlashcard (Deck: ${deckName}, CardID: ${cardId}, Data: ${JSON.stringify(cardData)}): ${error.message}\nStack: ${error.stack}`);
-      return { success: false, message: `Server error updating flashcard: ${error.message}` };
-    }
-  }
-
-  /**
    * Show card editor form inline
    * @param {Element} cardElement - The .admin-card-item element
    * @param {Object} card - The card object
@@ -723,21 +688,19 @@ function loadAdminDeckList() {
     const originalContentHtml = cardElement.innerHTML;
     const cardId = card.id || card.FlashcardID || '';
     
-    // Extract text content, attempt to separate from media tags for cleaner editing
     const sideA_text = (card.sideA || card.FlashcardSideA || '');
     let sideB_text = (card.sideB || card.FlashcardSideB || '');
     let sideC_text = (card.sideC || card.FlashcardSideC || '');
 
     const imageTagMatchB = sideB_text.match(/\[IMAGE:([^\]]+)\]/);
     const audioTagMatchC = sideC_text.match(/\[AUDIO:([^\]]+)\]/);
-    const audioTagMatchA = sideA_text.match(/\[AUDIO:([^\]]+)\]/); // Check for audio in Side A
+    const audioTagMatchA = sideA_text.match(/\[AUDIO:([^\]]+)\]/); 
     
     const existingImageUrl = imageTagMatchB ? imageTagMatchB[1] : null;
     const existingAudioUrlC = audioTagMatchC ? audioTagMatchC[1] : null;
-    const existingAudioUrlA = audioTagMatchA ? audioTagMatchA[1] : null; // Store audio URL from Side A
+    const existingAudioUrlA = audioTagMatchA ? audioTagMatchA[1] : null; 
     
-    // Parse study configuration
-    let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false }; // Add autoplayAudio
+    let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false }; 
     if (card.StudyConfig) {
       try {
         const parsedConfig = JSON.parse(card.StudyConfig);
@@ -809,22 +772,6 @@ function loadAdminDeckList() {
               <input type="checkbox" id="editAutoplayAudio-${cardId}" ${studyConfig.autoplayAudio ? 'checked' : ''}> 
               <label for="editAutoplayAudio-${cardId}">Auto-play audio when card is flipped</label>
             </div>
-            <div class="checkbox-item">
-              <input type="checkbox" id="studyAutoplay" checked> 
-              <label for="studyAutoplay">Auto-play audio when card is flipped</label>
-            </div>
-
-            // Also add an audio button to Side A input:
-            <div class="form-group">
-              <label for="newCardSideA" class="form-label">Side A (Question/Word)</label>
-              <div class="input-with-button">
-                <input type="text" id="newCardSideA" class="form-control" required>
-                <button id="getAudioBtnA" class="btn btn-sm">Get Audio</button>
-              </div>
-              <div id="audioPreviewContainerA" class="preview-container" style="display: none; margin-top: 10px;">
-                <audio id="audioPreviewA" controls style="width: 100%;"></audio>
-              </div>
-            </div>
           </div>
         </div>
         <div class="form-actions">
@@ -834,7 +781,6 @@ function loadAdminDeckList() {
       </div>
     `;
     
-    // Store existing URLs in dataset for submission if not changed
     if (existingImageUrl) document.getElementById(`editCardSideB-${cardId}`).dataset.imageUrl = existingImageUrl;
     if (existingAudioUrlC) document.getElementById(`editCardSideC-${cardId}`).dataset.audioUrl = existingAudioUrlC;
     if (existingAudioUrlA) document.getElementById(`editCardSideA-${cardId}`).dataset.audioUrl = existingAudioUrlA;
@@ -917,7 +863,6 @@ function loadAdminDeckList() {
                                 ? result.message
                                 : `No ${type} found for "${word}". General: ${result.message}`;
           showError(specificMessage);
-          // Clear previous preview if any
           previewContainer.style.display = 'none';
           previewElement.src = '';
           if (type === 'image') targetInput.removeAttribute('data-image-url');
@@ -929,7 +874,7 @@ function loadAdminDeckList() {
         showError(`Error fetching ${type}: ` + (err.message || err));
         console.error(`Error in ${type} lookup:`, err);
       })
-      .previewDictionaryContent(word); // Server-side function name is still previewDictionaryContent
+      .previewDictionaryContent(word); 
   }
   
   /**
@@ -947,7 +892,6 @@ function loadAdminDeckList() {
     const sideC_text = sideC_input.value.trim();
     const tags = document.getElementById(`editCardTags-${cardId}`).value.trim();
     
-    // Get study configuration
     const showSideB = document.getElementById(`editStudySideB-${cardId}`).checked;
     const showSideC = document.getElementById(`editStudySideC-${cardId}`).checked;
     const autoplayAudio = document.getElementById(`editAutoplayAudio-${cardId}`).checked;
@@ -993,7 +937,7 @@ function loadAdminDeckList() {
         console.error('Error in updateFlashcard call:', errorMsg);
         hideLoadingIndicator();
       })
-      .updateFlashcard(deckName, cardId, cardData, imageUrl, audioUrlC, audioUrlA); // Pass URLs with Side A audio
+      .updateFlashcard(deckName, cardId, cardData, imageUrl, audioUrlC, audioUrlA); 
   }
 
   /**
