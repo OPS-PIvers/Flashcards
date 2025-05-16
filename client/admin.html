@@ -356,11 +356,11 @@ function loadAdminDeckList() {
       cards.forEach(card => {
         const cardId = escapeHtml(card.id || card.FlashcardID || '');
         const sideA = escapeHtml(card.sideA || card.FlashcardSideA || '');
-        const sideB = escapeHtml(card.sideB || card.FlashcardSideB || ''); // Will be rendered by renderDictionaryContent
-        const sideC = escapeHtml(card.sideC || card.FlashcardSideC || ''); // Will be rendered by renderDictionaryContent
+        const sideB = escapeHtml(card.sideB || card.FlashcardSideB || ''); 
+        const sideC = escapeHtml(card.sideC || card.FlashcardSideC || ''); 
         
         // Extract study configuration 
-        let studyConfig = { showSideB: true, showSideC: true }; // Default values
+        let studyConfig = { showSideB: true, showSideC: true }; 
         if (card.StudyConfig) {
           try {
             const parsedConfig = JSON.parse(card.StudyConfig);
@@ -374,11 +374,6 @@ function loadAdminDeckList() {
         if (Array.isArray(card.tags)) tags = escapeHtml(card.tags.join(', '));
         else if (typeof card.tags === 'string') tags = escapeHtml(card.tags);
         else if (card.Tags) tags = Array.isArray(card.Tags) ? escapeHtml(card.Tags.join(', ')) : escapeHtml(String(card.Tags));
-        
-        // Side B and C will be processed by renderDictionaryContent if tags are present
-        // For admin view, we can show raw tags or a simplified version.
-        // Here, we'll just show the raw text for brevity in admin view.
-        // A more advanced view could render the tags similarly to the study view.
         
         cardListHtml += `
           <div class="admin-card-item" data-card-id="${cardId}">
@@ -411,12 +406,18 @@ function loadAdminDeckList() {
           <h3>Add New Card</h3>
           <div class="form-group">
             <label for="newCardSideA" class="form-label">Side A (Question/Word)</label>
-            <input type="text" id="newCardSideA" class="form-control" required>
+            <div class="input-with-button">
+              <input type="text" id="newCardSideA" class="form-control" required>
+              <button id="getAudioBtnA" class="btn btn-sm">Get Audio</button>
+            </div>
+            <div id="audioPreviewContainerA" class="preview-container" style="display: none; margin-top: 10px;">
+              <audio id="audioPreviewA" controls style="width: 100%;"></audio>
+            </div>
           </div>
           <div class="form-group">
             <label for="newCardSideB" class="form-label">Side B (Answer/Text)</label>
             <div class="input-with-button">
-              <input type="text" id="newCardSideB" class="form-control"> <!-- Allow empty if image is primary -->
+              <input type="text" id="newCardSideB" class="form-control">
               <button id="getImageBtn" class="btn btn-sm">Get Image</button>
             </div>
             <div id="imagePreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
@@ -451,6 +452,10 @@ function loadAdminDeckList() {
               <div class="checkbox-item">
                 <input type="checkbox" id="studySideC" checked> 
                 <label for="studySideC">Show Side C on back</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studyAutoplay" checked> 
+                <label for="studyAutoplay">Auto-play audio when card is flipped</label>
               </div>
             </div>
           </div>
@@ -524,7 +529,6 @@ function loadAdminDeckList() {
       });
     });
   }
-
   /**
    * Handle dictionary lookup for a specific card, pre-filling dictionary tab.
    * @param {Object} card - The card object
