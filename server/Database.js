@@ -18,13 +18,13 @@ function createDatabaseSpreadsheet(name) {
   // Add the active user (creator) as an editor for immediate access
   try {
     const activeUserEmail = Session.getActiveUser().getEmail();
-    if (activeUserEmail) { 
+    if (activeUserEmail) {
       DriveApp.getFileById(id).addEditor(activeUserEmail);
     }
   } catch (e) {
     Logger.log(`Could not automatically add editor ${Session.getActiveUser().getEmail()} to spreadsheet ${id}: ${e.message}. Manual sharing might be needed.`);
   }
-  
+
   Logger.log(`Database spreadsheet created: Name='${name}', ID='${id}'`);
   return { id, url, spreadsheet };
 }
@@ -48,7 +48,7 @@ function initializeDatabaseStructure(spreadsheetId) {
 
   const classesSheet = ss.getSheetByName('Classes') || ss.insertSheet('Classes');
   setupClassesSheet(classesSheet);
-  
+
   Logger.log(`Database structure initialized for spreadsheet ID: ${spreadsheetId}`);
 }
 
@@ -58,22 +58,27 @@ function initializeDatabaseStructure(spreadsheetId) {
  * @param {Sheet} sheet - The 'Config' sheet object
  */
 function setupConfigSheet(sheet) {
-  sheet.clearContents(); 
+  sheet.clearContents();
+  // PHASE 1 MODIFICATION: Updated headers to reflect a more realistic user config
   const headers = [
-    'FlashcardID', 'FlashcardSideA', 'FlashcardSideB', 'FlashcardSideC',
-    'Tags', 'DateCreated', 'CreatedBy', 'StudyConfig'
+    'StudentFirst', 'StudentLast', 'UserName', 'Password',
+    'IsAdmin', 'DateCreated', 'LastLogin', 'PreferredDeck', 'SessionDuration'
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
 
   const adminUser = [
-    'Admin', 'User', 'admin', 'password', 
-    true, 
-    new Date(), 
-    '', 
-    '', 
-    '60' 
+    'Admin', 'User', 'admin', 'password',
+    true, // IsAdmin
+    new Date(), // DateCreated
+    '', // LastLogin
+    '', // PreferredDeck
+    '60' // SessionDuration
   ];
   sheet.getRange(2, 1, 1, adminUser.length).setValues([adminUser]);
+  // Ensure 'IsAdmin' column is formatted as checkbox for new rows if possible (manual step or advanced script)
+  // For now, it will be TRUE/FALSE text. Checkbox needs specific handling if default is desired.
+  // Example: var rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  // sheet.getRange("E2:E").setDataValidation(rule); // If E is IsAdmin column
 
   headers.forEach((_, i) => sheet.autoResizeColumn(i + 1));
   Logger.log("'Config' sheet setup complete with default admin user.");
@@ -92,12 +97,12 @@ function setupClassesSheet(sheet) {
   const sampleClass = [
     'Sample Class 101',
     `class_${Utilities.getUuid().substring(0,6)}`,
-    'admin', 
-    JSON.stringify([]), 
-    JSON.stringify(['Sample_Deck']) 
+    'admin',
+    JSON.stringify([]),
+    JSON.stringify(['Sample_Deck'])
   ];
   sheet.getRange(2, 1, 1, sampleClass.length).setValues([sampleClass]);
-  
+
   headers.forEach((_, i) => sheet.autoResizeColumn(i + 1));
   Logger.log("'Classes' sheet setup complete.");
 }
@@ -110,33 +115,35 @@ function setupClassesSheet(sheet) {
 function createSampleDeck(spreadsheetId) {
   const ss = SpreadsheetApp.openById(spreadsheetId);
   const deckName = 'Sample_Deck';
-  
+
   let deckSheet = ss.getSheetByName(deckName);
   if (deckSheet) {
-    deckSheet.clearContents(); 
+    deckSheet.clearContents();
   } else {
     deckSheet = ss.insertSheet(deckName);
   }
 
   const headers = [
     'FlashcardID', 'FlashcardSideA', 'FlashcardSideB', 'FlashcardSideC',
-    'Tags', 'DateCreated', 'CreatedBy'
+    'Tags', 'DateCreated', 'CreatedBy', 'StudyConfig' // Added StudyConfig
   ];
   deckSheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
 
   const sampleCards = [
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the capital of France?', 'Paris', 'Hint: European city', 'geography,europe', new Date(), 'admin'],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is 2 + 2?', '4', '', 'math,basics', new Date(), 'admin'],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'Who wrote "Romeo and Juliet"?', 'William Shakespeare', 'Famous English playwright', 'literature,classics', new Date(), 'admin'],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is H₂O (H2O)?', 'Water', 'Chemical formula', 'science,chemistry', new Date(), 'admin'],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the largest planet in our solar system?', 'Jupiter', 'A gas giant', 'science,astronomy', new Date(), 'admin']
+    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the capital of France?', 'Paris', 'Hint: European city', 'geography,europe', new Date(), 'admin', '{"showSideB":true, "showSideC":true, "autoplayAudio":false}'],
+    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is 2 + 2?', '4', '', 'math,basics', new Date(), 'admin', '{"showSideB":true, "showSideC":false, "autoplayAudio":false}'],
+    [`card_${Utilities.getUuid().substring(0,8)}`, 'Who wrote "Romeo and Juliet"?', 'William Shakespeare', 'Famous English playwright\n[AUDIO:sample_audio_url_if_any]', 'literature,classics', new Date(), 'admin', '{"showSideB":true, "showSideC":true, "autoplayAudio":true}'],
+    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is H₂O (H2O)?', '[IMAGE:sample_image_url_if_any]\nWater', 'Chemical formula', 'science,chemistry', new Date(), 'admin', '{"showSideB":true, "showSideC":true, "autoplayAudio":false}'],
+    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the largest planet in our solar system?', 'Jupiter', 'A gas giant', 'science,astronomy', new Date(), 'admin', 'true'] // Example of non-JSON StudyConfig
   ];
   if (sampleCards.length > 0) {
-    deckSheet.getRange(2, 1, sampleCards.length, headers.length).setValues(sampleCards);
+    // Ensure sampleCards array matches the number of headers
+    const cardsToInsert = sampleCards.map(card => card.length >= headers.length ? card : [...card, ...Array(headers.length - card.length).fill('')]);
+    deckSheet.getRange(2, 1, cardsToInsert.length, headers.length).setValues(cardsToInsert);
   }
-  
+
   headers.forEach((_, i) => deckSheet.autoResizeColumn(i + 1));
-  Logger.log(`'${deckName}' sheet setup complete with sample cards.`);
+  Logger.log(`'${deckName}' sheet setup complete with sample cards and StudyConfig.`);
 }
 
 /**
@@ -147,7 +154,7 @@ function createSampleDeck(spreadsheetId) {
  * @throws {Error} If databaseId script property is not set.
  */
 function getDatabaseSpreadsheet() {
-  const databaseId = getScriptProperty('databaseId'); 
+  const databaseId = getScriptProperty('databaseId');
   if (!databaseId) {
     Logger.log("CRITICAL: Database ID script property not found.");
     throw new Error('Database not initialized. Please run initialization or check Script Properties.');
@@ -196,25 +203,27 @@ function getAvailableDecks(excludeSystemSheets = true) {
  * @throws {Error} If deck not found or required columns are missing.
  */
 function getDeckFlashcards(deckName) {
+  Logger.log(`Database.js: getDeckFlashcards - Processing deck: ${deckName}`); // PHASE 1 LOGGING
   const ss = getDatabaseSpreadsheet();
   const sheet = ss.getSheetByName(deckName);
 
   if (!sheet) {
-    Logger.log(`Deck not found: ${deckName}`);
+    Logger.log(`Database.js: getDeckFlashcards - Deck not found: ${deckName}`);
     throw new Error(`Deck "${deckName}" not found.`);
   }
 
   const data = sheet.getDataRange().getValues();
-  if (data.length < 1) { 
-      Logger.log(`Deck "${deckName}" is empty or has no headers.`);
-      return []; 
+  if (data.length < 1) {
+      Logger.log(`Database.js: getDeckFlashcards - Deck "${deckName}" is empty or has no headers.`);
+      return [];
   }
-  const headers = data[0].map(h => String(h).trim()); 
+  const headers = data[0].map(h => String(h).trim());
+  Logger.log(`Database.js: getDeckFlashcards - Headers for ${deckName}: ${JSON.stringify(headers)}`); // PHASE 1 LOGGING
 
-  const requiredColumns = ['FlashcardID', 'FlashcardSideA', 'FlashcardSideB'];
+  const requiredColumns = ['FlashcardID', 'FlashcardSideA', 'FlashcardSideB']; // Keep StudyConfig optional here, handle in FlashcardSystem
   for (const col of requiredColumns) {
     if (!headers.includes(col)) {
-      Logger.log(`Deck "${deckName}" is missing required column: ${col}`);
+      Logger.log(`Database.js: getDeckFlashcards - Deck "${deckName}" is missing required column: ${col}`);
       throw new Error(`Deck "${deckName}" is missing required column: "${col}". Please check sheet headers.`);
     }
   }
@@ -223,45 +232,51 @@ function getDeckFlashcards(deckName) {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const card = {};
-    let hasEssentialData = true; 
+    let hasEssentialData = false; // Start as false, set to true if ID is present
 
     headers.forEach((header, index) => {
       let value = row[index];
-      // Ensure value is JSON serializable: convert Dates to ISO strings, others to string/number/boolean
       if (value instanceof Date) {
         card[header] = value.toISOString();
       } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) {
         card[header] = value;
       } else {
-        // For any other complex types or if unsure, convert to string.
         card[header] = value != null ? String(value) : null;
       }
 
-      if (requiredColumns.includes(header) && (card[header] === null || String(card[header]).trim() === '')) {
-          if (header === 'FlashcardID') hasEssentialData = false; 
+      if (header === 'FlashcardID' && card[header] && String(card[header]).trim() !== '') {
+          hasEssentialData = true;
       }
     });
-    
-    if (hasEssentialData && card.FlashcardID && card.FlashcardSideA && card.FlashcardSideB) {
-        if (headers.includes('Tags') && typeof card['Tags'] === 'string') { 
+
+    // Also ensure SideA and SideB are present for a card to be considered valid
+    if (hasEssentialData && card.FlashcardSideA && card.FlashcardSideB) {
+        if (headers.includes('Tags') && typeof card['Tags'] === 'string') {
             card['Tags'] = card['Tags'].split(',').map(tag => tag.trim()).filter(tag => tag);
-        } else if (headers.includes('Tags')) { // If Tags column exists but value isn't a string (e.g. null or already processed)
-            if (Array.isArray(card['Tags'])) {
-              // Value is already an array, do nothing or ensure elements are strings if necessary
-            } else {
-              card['Tags'] = []; 
-            }
+        } else if (headers.includes('Tags')) {
+            card['Tags'] = Array.isArray(card['Tags']) ? card['Tags'].map(String) : [];
         }
+        // Ensure StudyConfig is passed as a string if it exists, or null/undefined otherwise
+        if (headers.includes('StudyConfig')) {
+            card['StudyConfig'] = (card['StudyConfig'] === null || typeof card['StudyConfig'] === 'undefined') ? null : String(card['StudyConfig']);
+        } else {
+            card['StudyConfig'] = null; // Explicitly null if column doesn't exist
+        }
+
         flashcards.push(card);
     } else {
-        Logger.log(`Skipping row ${i+1} in deck "${deckName}" due to missing essential data (ID, SideA, or SideB). Card data: ${JSON.stringify(card)}`);
+        Logger.log(`Database.js: getDeckFlashcards - Skipping row ${i+1} in deck "${deckName}" due to missing FlashcardID, FlashcardSideA, or FlashcardSideB. Card data (raw from sheet): ${JSON.stringify(row.slice(0, headers.length))}`);
     }
+  }
+  // PHASE 1 LOGGING: Log a sample of the cards being returned
+  if (flashcards.length > 0) {
+    Logger.log(`Database.js: getDeckFlashcards - Raw card data from sheet for ${deckName} (first 3 or fewer): ${JSON.stringify(flashcards.slice(0, 3))}`);
+  } else {
+    Logger.log(`Database.js: getDeckFlashcards - No valid cards found in ${deckName} after processing rows.`);
   }
   return flashcards;
 }
 
-
-// server/Database.js - Update the getUserData function
 
 /**
  * Retrieves user data from the 'Config' sheet based on username.
@@ -282,47 +297,46 @@ function getUserData(username) {
     const headers = data[0].map(h => String(h).trim());
     const usernameIndex = headers.indexOf('UserName');
     const isAdminIndex = headers.indexOf('IsAdmin');
-    
-    // Debug log to see if IsAdmin column exists
-    Logger.log(`getUserData: Looking for user "${username}". IsAdmin column index: ${isAdminIndex}`);
+
+    Logger.log(`Database.js: getUserData - Looking for user "${username}". Headers: ${JSON.stringify(headers)}. UserName index: ${usernameIndex}, IsAdmin index: ${isAdminIndex}`);
 
     if (usernameIndex === -1) {
       Logger.log("CRITICAL: 'UserName' column not found in 'Config' sheet.");
-      return null; 
+      return null;
     }
 
     const lowerCaseUsername = username.toLowerCase();
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === lowerCaseUsername) {
-        // Found the user - directly check the cell for checkbox state
-        let isAdminValue = false;
-        
+        let isAdminValue = false; // Default to false
+
         if (isAdminIndex !== -1) {
-          // CRITICAL FIX: Get the actual checkbox state from the sheet
+          const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1); // Sheet rows are 1-indexed
+          const cellValue = isAdminCell.getValue();
+          let isCheckedByMethod = null;
           try {
-            // Get the ACTUAL cell value directly, bypassing getValue/getValues which may convert incorrectly
-            const isAdminCell = configSheet.getRange(i+1, isAdminIndex+1);
-            // Log the raw checkbox value
-            Logger.log(`Raw IsAdmin cell value for ${username}: ${isAdminCell.getValue()}; Checkbox checked: ${isAdminCell.isChecked()}`);
-            
-            // Use isChecked() method which works specifically for checkboxes
-            isAdminValue = isAdminCell.isChecked();
-          } catch (checkboxErr) {
-            Logger.log(`Error getting checkbox state: ${checkboxErr.message}`);
-            // Fallback to normal value
-            isAdminValue = row[isAdminIndex] === true || 
-                         String(row[isAdminIndex]).toUpperCase() === 'TRUE';
+            isCheckedByMethod = isAdminCell.isChecked(); // This is the most reliable for checkboxes
+          } catch (e) {
+            Logger.log(`Database.js: getUserData - isAdminCell.isChecked() failed for ${username} at ${isAdminCell.getA1Notation()}: ${e.message}. Value was: ${cellValue}`);
           }
+
+          if (isCheckedByMethod === true) {
+            isAdminValue = true;
+          } else if (isCheckedByMethod === false) {
+            isAdminValue = false;
+          } else { // Fallback if isChecked() is null (not a checkbox) or failed
+            isAdminValue = cellValue === true || String(cellValue).toUpperCase() === 'TRUE';
+          }
+          Logger.log(`Database.js: getUserData - User: ${username}, IsAdmin raw cell value: ${cellValue} (type: ${typeof cellValue}), isChecked(): ${isCheckedByMethod}, final isAdminValue: ${isAdminValue}`);
+        } else {
+            Logger.log(`Database.js: getUserData - IsAdmin column not found for user ${username}. Defaulting IsAdmin to false.`);
         }
-        
-        // Build user object manually to ensure correct IsAdmin value
+
         const user = {};
         headers.forEach((header, index) => {
             if (header === 'IsAdmin') {
-              // Override with our specially-checked value
               user[header] = isAdminValue;
-              Logger.log(`Setting user.IsAdmin to ${isAdminValue} for user ${username}`);
             } else {
               let value = row[index];
               if (value instanceof Date) {
@@ -332,10 +346,11 @@ function getUserData(username) {
               }
             }
         });
-        
+        Logger.log(`Database.js: getUserData - Found user: ${username}, Data: ${JSON.stringify(user)}`);
         return user;
       }
     }
+    Logger.log(`Database.js: getUserData - User not found: ${username}`);
     return null; // User not found
   } catch (error) {
     Logger.log(`Error in getUserData for "${username}": ${error.message}\nStack: ${error.stack}`);
@@ -364,7 +379,7 @@ function updateUserLastLogin(username) {
 
     if (usernameIndex === -1 || lastLoginIndex === -1) {
       Logger.log("CRITICAL: 'UserName' or 'LastLogin' column not found in 'Config' sheet.");
-      return; 
+      return;
     }
 
     const lowerCaseUsername = username.toLowerCase();
@@ -390,10 +405,6 @@ function updateUserLastLogin(username) {
  * @return {Object} {success: boolean, message: string}
  */
 function addUser(userData) {
-  // Admin check should be done in the calling function (e.g., from AdminTools.js)
-  // For direct calls from server-side not triggered by client, this is okay.
-  // If called from client via google.script.run, the client-facing server function must do the check.
-
   if (!userData || !userData.UserName || !userData.Password) {
     return { success: false, message: "UserName and Password are required to add a new user." };
   }
@@ -422,10 +433,10 @@ function addUser(userData) {
         case 'StudentFirst': return userData.StudentFirst || '';
         case 'StudentLast': return userData.StudentLast || '';
         case 'UserName': return userData.UserName;
-        case 'Password': return userData.Password; 
-        case 'IsAdmin': return String(userData.IsAdmin === true || String(userData.IsAdmin).toUpperCase() === 'TRUE').toUpperCase();
-        case 'DateCreated': return new Date(); // Stored as Date object in sheet
-        case 'LastLogin': return ''; // Stored as empty, will become Date object on login
+        case 'Password': return userData.Password;
+        case 'IsAdmin': return userData.IsAdmin === true || String(userData.IsAdmin).toUpperCase() === 'TRUE'; // Store as boolean
+        case 'DateCreated': return new Date();
+        case 'LastLogin': return '';
         case 'PreferredDeck': return userData.PreferredDeck || '';
         case 'SessionDuration': return userData.SessionDuration || '60';
         default: return '';
@@ -433,7 +444,7 @@ function addUser(userData) {
     });
 
     configSheet.appendRow(newRowValues);
-    Logger.log(`New user added: ${userData.UserName}`); // Should ideally log who added the user
+    Logger.log(`New user added: ${userData.UserName}`);
     return { success: true, message: `User "${userData.UserName}" added successfully.` };
 
   } catch (error) {
@@ -442,143 +453,95 @@ function addUser(userData) {
   }
 }
 
-// Add this to server/Database.js - New function to get admin status directly
 
-function isUserAdminInSheet(username) {
-  return getIsUserAdmin(username);
-}
-
-
-/**
- * Improved admin status verification that accounts for column name variations
- * 
- * @param {string} username - The username to check
- * @return {boolean} True if the user is an admin, false otherwise
- */
 function getIsUserAdmin(username) {
+  // PHASE 1 MODIFICATION: Enhanced logging within this critical function
+  Logger.log(`Database.js: getIsUserAdmin - Checking admin status for: ${username}`);
   try {
     if (!username || typeof username !== 'string') {
-      Logger.log("getIsUserAdmin: Invalid username parameter");
+      Logger.log("Database.js: getIsUserAdmin - Invalid username parameter (null, undefined, or not a string). Returning false.");
       return false;
     }
-    
+
     const ss = getDatabaseSpreadsheet();
     const configSheet = ss.getSheetByName('Config');
-    
+
     if (!configSheet) {
-      Logger.log("getIsUserAdmin: Config sheet not found");
+      Logger.log("Database.js: getIsUserAdmin - Config sheet not found. Returning false.");
       return false;
     }
-    
-    // Get all data including headers
+
     const data = configSheet.getDataRange().getValues();
     if (data.length <= 1) {
-      Logger.log("getIsUserAdmin: Config sheet has no data or only headers");
+      Logger.log("Database.js: getIsUserAdmin - Config sheet has no data or only headers. Returning false.");
       return false;
     }
-    
-    // Convert headers to lowercase for case-insensitive matching
+
     const headers = data[0].map(h => String(h).trim());
-    Logger.log("getIsUserAdmin: Found headers: " + JSON.stringify(headers));
-    
-    // Find username column - try multiple possible variations
+    Logger.log("Database.js: getIsUserAdmin - Config sheet headers: " + JSON.stringify(headers));
+
     let usernameIndex = headers.indexOf('UserName');
-    if (usernameIndex === -1) {
-      usernameIndex = headers.indexOf('Username');
-      if (usernameIndex === -1) {
-        usernameIndex = headers.indexOf('User Name');
-        if (usernameIndex === -1) {
-          usernameIndex = headers.indexOf('userName');
-        }
-      }
-    }
-    
-    // Find admin column - try multiple possible variations
     let isAdminIndex = headers.indexOf('IsAdmin');
-    if (isAdminIndex === -1) {
-      isAdminIndex = headers.indexOf('isAdmin');
-      if (isAdminIndex === -1) {
-        isAdminIndex = headers.indexOf('Is Admin');
-        if (isAdminIndex === -1) {
-          isAdminIndex = headers.indexOf('Admin');
-        }
-      }
-    }
-    
-    Logger.log(`getIsUserAdmin: Column indices - UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}`);
-    
+
+    Logger.log(`Database.js: getIsUserAdmin - Determined column indices - UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}`);
+
     if (usernameIndex === -1) {
-      Logger.log("getIsUserAdmin: Username column not found in Config sheet");
+      Logger.log("Database.js: getIsUserAdmin - UserName column not found in Config sheet. Returning false.");
       return false;
     }
-    
-    // If we can't find the IsAdmin column, default to TRUE for the 'admin' user as a recovery mechanism
+
     if (isAdminIndex === -1) {
-      Logger.log("getIsUserAdmin: IsAdmin column not found in Config sheet");
-      // Special hardcoded recovery for the 'admin' username
+      Logger.log("Database.js: getIsUserAdmin - IsAdmin column not found in Config sheet.");
       if (username.toLowerCase() === 'admin') {
-        Logger.log("getIsUserAdmin: Special case - 'admin' user defaults to admin privileges when IsAdmin column missing");
-        return true;
+        Logger.log("Database.js: getIsUserAdmin - IsAdmin column missing, but user is 'admin'. Defaulting to TRUE for 'admin'.");
+        return true; // Special fallback for 'admin' user if IsAdmin column is missing
       }
+      Logger.log("Database.js: getIsUserAdmin - IsAdmin column missing and user is not 'admin'. Returning false.");
       return false;
     }
-    
-    // Search for the user
+
     const lowerCaseUsername = username.toLowerCase();
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const currentUsername = String(row[usernameIndex] || "").toLowerCase();
-      
-      if (currentUsername === lowerCaseUsername) {
-        // Found the user - check admin status using multiple methods
-        const isAdminRawValue = row[isAdminIndex];
-        
-        // Try to get the cell directly for additional checks
-        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
-        let isAdminCellValue = isAdminCell.getValue();
-        let isCheckedState = false;
-        
+      const currentUsernameInSheet = String(row[usernameIndex] || "").toLowerCase();
+
+      if (currentUsernameInSheet === lowerCaseUsername) {
+        Logger.log(`Database.js: getIsUserAdmin - Found user '${username}' at sheet row ${i + 1}.`);
+        const isAdminRawValueFromSheet = row[isAdminIndex];
+        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1); // Sheet rows are 1-indexed
+        let isCheckedByMethod = null;
+        let isAdminCellValue = isAdminCell.getValue(); // Get direct cell value
+
         try {
-          isCheckedState = isAdminCell.isChecked();
-          Logger.log(`getIsUserAdmin: isChecked() for ${username} = ${isCheckedState}`);
+          // isChecked() is the most reliable for actual checkboxes
+          isCheckedByMethod = isAdminCell.isChecked();
+          Logger.log(`Database.js: getIsUserAdmin - For user '${username}', isAdminCell.isChecked() result: ${isCheckedByMethod} (Cell A1: ${isAdminCell.getA1Notation()})`);
         } catch (e) {
-          Logger.log(`getIsUserAdmin: isChecked() method failed: ${e.message}`);
+          // This might happen if the cell isn't a checkbox or there's an issue with the method.
+          Logger.log(`Database.js: getIsUserAdmin - isAdminCell.isChecked() failed for user '${username}': ${e.message}. Raw value: ${isAdminRawValueFromSheet}, Cell value: ${isAdminCellValue}`);
         }
-        
-        // Special case for the default admin user
-        if (username.toLowerCase() === 'admin') {
-          // For admin user, log extensively but default to true in case of uncertainty
-          Logger.log(`getIsUserAdmin: Admin user check - Raw value: ${isAdminRawValue}, Cell value: ${isAdminCellValue}, isChecked: ${isCheckedState}`);
-          
-          // If there's a clear FALSE value, respect it
-          if (isAdminRawValue === false || 
-              isAdminCellValue === false || 
-              String(isAdminRawValue).toLowerCase() === 'false') {
-            Logger.log("getIsUserAdmin: Admin user has explicit FALSE admin status");
-            return false;
-          }
-          
-          // Otherwise default to admin for the 'admin' user
-          Logger.log("getIsUserAdmin: Defaulting 'admin' user to admin privileges");
-          return true;
+
+        // Determine admin status based on checkbox state first, then cell value
+        let determinedAdminStatus;
+        if (isCheckedByMethod === true) {
+          determinedAdminStatus = true;
+        } else if (isCheckedByMethod === false) {
+          determinedAdminStatus = false;
+        } else {
+          // Fallback if isChecked() is null (e.g., not a checkbox, or error)
+          // Check the direct cell value (TRUE/FALSE string or boolean true/false)
+          determinedAdminStatus = isAdminCellValue === true || String(isAdminCellValue).toUpperCase() === 'TRUE';
+          Logger.log(`Database.js: getIsUserAdmin - For user '${username}', fell back to cell value check. Cell value: ${isAdminCellValue}, Result: ${determinedAdminStatus}`);
         }
-        
-        // Normal case for other users
-        // Check multiple possible admin status indicators
-        const isAdmin = isAdminRawValue === true || 
-                      isAdminCellValue === true ||
-                      isCheckedState === true ||
-                      String(isAdminRawValue).toLowerCase() === 'true';
-        
-        Logger.log(`getIsUserAdmin: User "${username}" admin status: ${isAdmin} (Raw: ${isAdminRawValue}, Cell: ${isAdminCellValue}, Checked: ${isCheckedState})`);
-        return isAdmin;
+        Logger.log(`Database.js: getIsUserAdmin - Final admin status for '${username}': ${determinedAdminStatus}. Raw sheet value: ${isAdminRawValueFromSheet}, Direct cell value: ${isAdminCellValue}, isChecked(): ${isCheckedByMethod}`);
+        return determinedAdminStatus;
       }
     }
-    
-    Logger.log(`getIsUserAdmin: User "${username}" not found in Config sheet`);
+
+    Logger.log(`Database.js: getIsUserAdmin - User "${username}" not found in Config sheet after iterating. Returning false.`);
     return false;
   } catch (error) {
-    Logger.log(`Error in getIsUserAdmin for "${username}": ${error.message}\nStack: ${error.stack}`);
+    Logger.log(`Database.js: getIsUserAdmin - Error checking admin status for "${username}": ${error.message}\nStack: ${error.stack}. Returning false.`);
     return false;
   }
 }
