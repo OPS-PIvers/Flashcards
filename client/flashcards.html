@@ -21,8 +21,6 @@
           
           // Store deck data
           window.app.currentDeck = deckName;
-          window.app.currentCards = result.cards;
-          window.app.currentCardIndex = 0;
           
           // Show the flashcard view
           displayFlashcardView(result);
@@ -31,8 +29,6 @@
           const errorMsg = result ? result.message : `Failed to load deck "${escapeHtml(deckName)}". Received an unexpected or null response from the server.`;
           console.error('[loadDeck] Error or unexpected result:', result);
           handleError(errorMsg);
-          // Optionally, navigate away or show deck list if critical
-          // loadDeckList(); 
         }
       })
       .withFailureHandler(function(err) {
@@ -40,8 +36,6 @@
         const errorDetail = err && err.message ? err.message : 'Unknown error';
         console.error('[loadDeck] Failure handler triggered:', err);
         handleError(`An error occurred while loading deck "${escapeHtml(deckName)}": ${errorDetail}`);
-        // Optionally, navigate away or show deck list
-        // loadDeckList();
       })
       .getFlashcardsForDeck(deckName);
   }
@@ -192,6 +186,39 @@
     if (backToDeckListButton) {
       backToDeckListButton.addEventListener('click', loadDeckList);
     }
+  }
+
+  /**
+   * Display the flashcard study view
+   * 
+   * @param {Object} deckData - The deck data with cards
+   */
+  function displayFlashcardView(deckData) {
+    console.log('[displayFlashcardView] Called with deck data:', deckData);
+    
+    if (!deckData || !deckData.cards || deckData.cards.length === 0) {
+      const contentArea = document.getElementById('appContent');
+      contentArea.innerHTML = `
+        <div class="card">
+          <div class="card-title">No Cards Available</div>
+          <p>This deck doesn't have any cards yet. Please contact an administrator to add cards to this deck.</p>
+          <div class="form-actions">
+            <button id="backToDeckList" class="btn btn-outline">Back to Decks</button>
+          </div>
+        </div>
+      `;
+      
+      const backButton = document.getElementById('backToDeckList');
+      if (backButton) backButton.addEventListener('click', loadDeckList);
+      return;
+    }
+    
+    // Store cards in the app state
+    window.app.currentCards = deckData.cards;
+    window.app.currentCardIndex = 0;
+    
+    // Display the first card
+    displayFlashcard(deckData.cards, 0);
   }
 
   /**

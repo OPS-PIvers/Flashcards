@@ -108,128 +108,78 @@
     console.log('Admin tabs initialized');
   }
 
-  /**
-   * Load deck list for admin panel
-   */
-  function loadAdminDeckList() {
-    showLoadingIndicator();
-    console.log('Loading deck list for admin panel');
-    
-    const decksTabContent = document.getElementById('decksTab'); 
-    if (!decksTabContent) {
-        showError("Deck management area not found in admin panel.");
-        hideLoadingIndicator();
-        console.error('decksTab element not found in DOM');
-        return;
-    }
-    decksTabContent.innerHTML = `
-      <div class="card">
-        <div class="card-title">Editing Deck: ${escapeHtml(deckName)}</div>
-        <div class="form-actions">
-          <button id="backToAdminDecks" class="btn btn-outline">Back to Decks</button>
-          <button id="showAddCardFormBtn" class="btn">Add New Card</button>
+/**
+ * Load deck list for admin panel
+ */
+function loadAdminDeckList() {
+  showLoadingIndicator();
+  console.log('Loading deck list for admin panel');
+  
+  const decksTabContent = document.getElementById('decksTab'); 
+  if (!decksTabContent) {
+      showError("Deck management area not found in admin panel.");
+      hideLoadingIndicator();
+      console.error('decksTab element not found in DOM');
+      return;
+  }
+  
+  // Replace the HTML content with a template for deck management
+  decksTabContent.innerHTML = `
+    <div class="card">
+      <div class="card-title">Create New Deck</div>
+      <div class="form-group">
+        <label for="newDeckName" class="form-label">Deck Name</label>
+        <div class="input-with-button">
+          <input type="text" id="newDeckName" class="form-control" placeholder="Enter deck name">
+          <button id="createDeckBtn" class="btn">Create</button>
         </div>
-        <div id="addCardFormContainer" style="display: none; margin-top: 20px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
-          <h3>Add New Card</h3>
-          <div class="form-group">
-            <label for="newCardSideA" class="form-label">Side A (Question/Word)</label>
-            <div class="input-with-button">
-              <input type="text" id="newCardSideA" class="form-control" required>
-              <button id="getAudioBtnA" class="btn btn-sm">Get Audio</button>
-            </div>
-            <div id="audioPreviewContainerA" class="preview-container" style="display: none; margin-top: 10px;">
-              <audio id="audioPreviewA" controls style="width: 100%;"></audio>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="newCardSideB" class="form-label">Side B (Answer/Text)</label>
-            <div class="input-with-button">
-              <input type="text" id="newCardSideB" class="form-control"> <!-- Allow empty if image is primary -->
-              <button id="getImageBtn" class="btn btn-sm">Get Image</button>
-            </div>
-            <div id="imagePreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
-              <img id="imagePreview" style="max-width: 100%; max-height: 150px; object-fit: contain;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="newCardSideC" class="form-label">Side C (Additional Info/Text)</label>
-            <div class="input-with-button">
-              <textarea id="newCardSideC" class="form-control" rows="3"></textarea>
-              <button id="getAudioBtn" class="btn btn-sm">Get Audio</button>
-            </div>
-            <div id="audioPreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
-              <audio id="audioPreview" controls style="width: 100%;"></audio>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="newCardTags" class="form-label">Tags (comma-separated)</label>
-            <input type="text" id="newCardTags" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Study Configuration</label>
-            <div class="checkbox-group">
-              <div class="checkbox-item">
-                <input type="checkbox" id="studySideA" checked disabled> 
-                <label for="studySideA">Side A (Always shown on front)</label>
-              </div>
-              <div class="checkbox-item">
-                <input type="checkbox" id="studySideB" checked> 
-                <label for="studySideB">Show Side B on back</label>
-              </div>
-              <div class="checkbox-item">
-                <input type="checkbox" id="studySideC" checked> 
-                <label for="studySideC">Show Side C on back</label>
-              </div>
-              <div class="checkbox-item">
-                <input type="checkbox" id="studyAutoplay" checked> 
-                <label for="studyAutoplay">Auto-play audio when card is flipped</label>
-              </div>
-            </div>
-          </div>
-          <div class="form-actions">
-            <button id="submitNewCardBtn" class="btn btn-secondary">Save Card</button>
-            <button id="cancelAddCardBtn" class="btn btn-outline">Cancel</button>
-          </div>
-        </div>
-        <div class="admin-card-list" id="cardListDisplay">${cardListHtml}</div>
       </div>
-    `;
-    const createDeckBtn = document.getElementById('createDeckBtn');
-    if (createDeckBtn) {
-      createDeckBtn.addEventListener('click', createNewDeck);
-      console.log('Create deck button event listener attached');
-    } else {
-      console.warn('Create deck button not found after DOM update');
-    }
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Manage Decks</div>
+      <div id="adminDeckListContainer" class="admin-deck-list">
+        <p>Loading decks...</p>
+      </div>
+    </div>
+  `;
+  
+  const createDeckBtn = document.getElementById('createDeckBtn');
+  if (createDeckBtn) {
+    createDeckBtn.addEventListener('click', createNewDeck);
+    console.log('Create deck button event listener attached');
+  } else {
+    console.warn('Create deck button not found after DOM update');
+  }
 
-    google.script.run
-      .withSuccessHandler(function(result) {
-        console.log('Admin deck list loaded:', result);
-        if (result && result.success) {
-          displayAdminDeckList(result.decks);
-        } else {
-          const errorMsg = result ? result.message : 'Unknown error occurred';
-          handleError(errorMsg);
-          const deckListContainer = document.getElementById('adminDeckListContainer');
-          if(deckListContainer) {
-            deckListContainer.innerHTML = `<p>Error loading decks: ${escapeHtml(errorMsg)}</p>`;
-          }
-          console.error('Failed to load admin deck list:', errorMsg);
-        }
-        hideLoadingIndicator();
-      })
-      .withFailureHandler(function(err){
-        const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      console.log('Admin deck list loaded:', result);
+      if (result && result.success) {
+        displayAdminDeckList(result.decks);
+      } else {
+        const errorMsg = result ? result.message : 'Unknown error occurred';
         handleError(errorMsg);
         const deckListContainer = document.getElementById('adminDeckListContainer');
         if(deckListContainer) {
           deckListContainer.innerHTML = `<p>Error loading decks: ${escapeHtml(errorMsg)}</p>`;
         }
-        console.error('Error in getAvailableDecks call:', errorMsg);
-        hideLoadingIndicator();
-      })
-      .getAvailableDecks(false); 
-  }
+        console.error('Failed to load admin deck list:', errorMsg);
+      }
+      hideLoadingIndicator();
+    })
+    .withFailureHandler(function(err){
+      const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
+      handleError(errorMsg);
+      const deckListContainer = document.getElementById('adminDeckListContainer');
+      if(deckListContainer) {
+        deckListContainer.innerHTML = `<p>Error loading decks: ${escapeHtml(errorMsg)}</p>`;
+      }
+      console.error('Error in getAvailableDecks call:', errorMsg);
+      hideLoadingIndicator();
+    })
+    .getAvailableDecks(false); 
+}
 
   /**
    * Display deck list in admin panel
