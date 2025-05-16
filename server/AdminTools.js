@@ -127,7 +127,7 @@ function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
       return { success: false, message: 'Permission denied: Only administrators can add flashcards.' };
     }
 
-    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '' || !cardData.sideB === undefined ) { // Side B can be empty if image is provided
+    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
       return { success: false, message: 'Card Side A is required.' };
     }
     
@@ -167,6 +167,10 @@ function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
     }
 
     const cardId = `card_${Utilities.getUuid().substring(0, 8)}`;
+    const showSideB = cardData.showSideB !== false; // Default to true if not specified
+    const showSideC = cardData.showSideC !== false; // Default to true if not specified
+    const studyConfig = JSON.stringify({ showSideB, showSideC });
+
     const newCardRow = [
       cardId,
       cardData.sideA.trim(),
@@ -174,7 +178,8 @@ function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
       finalSideC.trim(),
       (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(','),
       new Date(),
-      session.userName
+      session.userName,
+      studyConfig // Add the new column
     ];
 
     sheet.appendRow(newCardRow);
@@ -321,7 +326,7 @@ function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlTo
       return { success: false, message: 'Permission denied: Only administrators can update flashcards.' };
     }
     
-    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '' || cardData.sideB === undefined) {
+    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
       return { success: false, message: 'Card Side A is required for update.' };
     }
 

@@ -60,8 +60,8 @@ function initializeDatabaseStructure(spreadsheetId) {
 function setupConfigSheet(sheet) {
   sheet.clearContents(); 
   const headers = [
-    'StudentFirst', 'StudentLast', 'UserName', 'Password', 'IsAdmin',
-    'DateCreated', 'LastLogin', 'PreferredDeck', 'SessionDuration'
+    'FlashcardID', 'FlashcardSideA', 'FlashcardSideB', 'FlashcardSideC',
+    'Tags', 'DateCreated', 'CreatedBy', 'StudyConfig'
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
 

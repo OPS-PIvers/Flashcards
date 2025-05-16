@@ -96,6 +96,24 @@
   }
   
   /**
+   * Helper function to check if content has valid displayable content
+   * 
+   * @param {string} content - Content to check
+   * @return {boolean} True if content has valid displayable content
+   */
+  function hasValidContent(content) {
+    if (!content) return false;
+    if (typeof content !== 'string') return false;
+    
+    // If it's just whitespace and no media tags, consider it empty
+    if (!content.includes('[IMAGE:') && !content.includes('[AUDIO:') && content.trim() === '') {
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /**
    * Display a specific flashcard
    * 
    * @param {Array} cards - Array of cards
@@ -118,12 +136,22 @@
     console.log('[displayFlashcard] card.FlashcardSideC:', card.FlashcardSideC, '(type: ' + typeof card.FlashcardSideC + ')');
     console.log('[displayFlashcard] card.id (should be FlashcardID):', card.id, '(type: ' + typeof card.id + ')');
 
-
     const contentArea = document.getElementById('appContent');
     
     // Process dictionary content in FlashcardSideC if present
     let sideCContent = card.FlashcardSideC || '';
     console.log('[displayFlashcard] Initial sideCContent for display:', sideCContent);
+    
+    // Parse study configuration
+    let studyConfig = { showSideB: true, showSideC: true }; // Default configuration
+    if (card.StudyConfig) {
+      try {
+        const parsedConfig = JSON.parse(card.StudyConfig);
+        studyConfig = { ...studyConfig, ...parsedConfig };
+      } catch (e) {
+        console.error('[displayFlashcard] Failed to parse study configuration:', e);
+      }
+    }
     
     contentArea.innerHTML = `
       <div class="flashcard-container">
@@ -138,8 +166,10 @@
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            <div class="flashcard-content">${escapeHtml(card.FlashcardSideB)}</div>
-            <div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(sideCContent)}</div>
+            ${(studyConfig.showSideB && hasValidContent(card.FlashcardSideB)) ? 
+              `<div class="flashcard-content">${escapeHtml(card.FlashcardSideB)}</div>` : ''}
+            ${(studyConfig.showSideC && hasValidContent(card.FlashcardSideC)) ? 
+              `<div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(sideCContent)}</div>` : ''}
           </div>
         </div>
         
@@ -168,24 +198,45 @@
       </div>
     `;
     
-    // If card has dictionary content, process it
-    // Check card.FlashcardSideC not just sideCContent, as sideCContent is already escaped.
-    if (card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:'))) {
-      console.log('[displayFlashcard] Dictionary content found in FlashcardSideC. Calling renderDictionaryContent.');
-      google.script.run
-        .withSuccessHandler(function(processedContent) {
-          console.log('[displayFlashcard] renderDictionaryContent success. Processed content:', processedContent);
-          // Update the card back with processed content
-          const secondaryContentElement = document.getElementById('flashcardSideCContent');
-          if (secondaryContentElement) {
-            secondaryContentElement.innerHTML = processedContent; // Processed content is already HTML
-          }
-        })
-        .withFailureHandler(function(err){
-            console.error("[displayFlashcard] Failed to render dictionary content:", err);
-            // sideCContent is already escaped and set, so it's a fallback
-        })
-        .renderDictionaryContent(card.FlashcardSideC);
+    // Process dictionary content in both Side B and Side C if present
+    if ((card.FlashcardSideB && (card.FlashcardSideB.includes('[AUDIO:') || card.FlashcardSideB.includes('[IMAGE:'))) ||
+        (card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:')))) {
+      
+      console.log('[displayFlashcard] Dictionary content found in flashcard sides. Processing content.');
+      
+      // Process Side B content
+      if (studyConfig.showSideB && card.FlashcardSideB && (card.FlashcardSideB.includes('[AUDIO:') || card.FlashcardSideB.includes('[IMAGE:'))) {
+        google.script.run
+          .withSuccessHandler(function(processedContent) {
+            console.log('[displayFlashcard] renderDictionaryContent success for Side B:', processedContent);
+            // Update the card back main content
+            const mainContentElement = document.querySelector('.flashcard-back .flashcard-content');
+            if (mainContentElement) {
+              mainContentElement.innerHTML = processedContent; // Processed content is already HTML
+            }
+          })
+          .withFailureHandler(function(err){
+            console.error("[displayFlashcard] Failed to render Side B dictionary content:", err);
+          })
+          .renderDictionaryContent(card.FlashcardSideB);
+      }
+      
+      // Process Side C content
+      if (studyConfig.showSideC && card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:'))) {
+        google.script.run
+          .withSuccessHandler(function(processedContent) {
+            console.log('[displayFlashcard] renderDictionaryContent success for Side C:', processedContent);
+            // Update the card back secondary content
+            const secondaryContentElement = document.getElementById('flashcardSideCContent');
+            if (secondaryContentElement) {
+              secondaryContentElement.innerHTML = processedContent; // Processed content is already HTML
+            }
+          })
+          .withFailureHandler(function(err){
+            console.error("[displayFlashcard] Failed to render Side C dictionary content:", err);
+          })
+          .renderDictionaryContent(card.FlashcardSideC);
+      }
     }
     
     // Add event listeners

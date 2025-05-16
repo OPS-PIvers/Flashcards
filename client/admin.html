@@ -354,6 +354,18 @@
         const sideA = escapeHtml(card.sideA || card.FlashcardSideA || '');
         const sideB = escapeHtml(card.sideB || card.FlashcardSideB || ''); // Will be rendered by renderDictionaryContent
         const sideC = escapeHtml(card.sideC || card.FlashcardSideC || ''); // Will be rendered by renderDictionaryContent
+        
+        // Extract study configuration 
+        let studyConfig = { showSideB: true, showSideC: true }; // Default values
+        if (card.StudyConfig) {
+          try {
+            const parsedConfig = JSON.parse(card.StudyConfig);
+            studyConfig = { ...studyConfig, ...parsedConfig };
+          } catch (e) {
+            console.error(`Error parsing study config for card ${cardId}:`, e);
+          }
+        }
+        
         let tags = '';
         if (Array.isArray(card.tags)) tags = escapeHtml(card.tags.join(', '));
         else if (typeof card.tags === 'string') tags = escapeHtml(card.tags);
@@ -370,7 +382,9 @@
               <strong>Side A:</strong> ${sideA}<br>
               <strong>Side B (raw):</strong> ${sideB}<br>
               ${sideC ? `<strong>Side C (raw):</strong> ${sideC}<br>` : ''}
-              ${tags ? `<strong>Tags:</strong> ${tags}` : ''}
+              ${tags ? `<strong>Tags:</strong> ${tags}<br>` : ''}
+              <strong>Study Config:</strong> Show Side B: ${studyConfig.showSideB ? 'Yes' : 'No'}, 
+              Show Side C: ${studyConfig.showSideC ? 'Yes' : 'No'}
             </div>
             <div class="admin-card-actions">
               <button class="btn btn-outline btn-sm" data-action="edit-card" data-card-id="${cardId}">Edit</button>
@@ -419,6 +433,23 @@
             <label for="newCardTags" class="form-label">Tags (comma-separated)</label>
             <input type="text" id="newCardTags" class="form-control">
           </div>
+          <div class="form-group">
+            <label class="form-label">Study Configuration</label>
+            <div class="checkbox-group">
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideA" checked disabled> 
+                <label for="studySideA">Side A (Always shown on front)</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideB" checked> 
+                <label for="studySideB">Show Side B on back</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideC" checked> 
+                <label for="studySideC">Show Side C on back</label>
+              </div>
+            </div>
+          </div>
           <div class="form-actions">
             <button id="submitNewCardBtn" class="btn btn-secondary">Save Card</button>
             <button id="cancelAddCardBtn" class="btn btn-outline">Cancel</button>
@@ -444,6 +475,8 @@
       document.getElementById('newCardSideC').removeAttribute('data-audio-url');
       document.getElementById('imagePreviewContainer').style.display = 'none';
       document.getElementById('audioPreviewContainer').style.display = 'none';
+      document.getElementById('studySideB').checked = true; // Reset to checked
+      document.getElementById('studySideC').checked = true; // Reset to checked
       document.getElementById('showAddCardFormBtn').style.display = 'inline-block';
     });
     document.getElementById('submitNewCardBtn').addEventListener('click', function() { addNewCardToDeck(deckName); });
@@ -536,6 +569,10 @@
     const sideB_text = document.getElementById('newCardSideB').value.trim(); // User's text for side B
     const sideC_text = document.getElementById('newCardSideC').value.trim(); // User's text for side C
     const tags = document.getElementById('newCardTags').value.trim();
+    
+    // Get study configuration
+    const showSideB = document.getElementById('studySideB').checked;
+    const showSideC = document.getElementById('studySideC').checked;
 
     if (!sideA) {
       handleError('Side A (Question/Word) is required.');
@@ -550,7 +587,14 @@
     const imageUrl = document.getElementById('newCardSideB').dataset.imageUrl || null;
     const audioUrl = document.getElementById('newCardSideC').dataset.audioUrl || null;
     
-    const cardData = { sideA: sideA, sideB: sideB_text, sideC: sideC_text, tags: tags };
+    const cardData = { 
+      sideA: sideA, 
+      sideB: sideB_text, 
+      sideC: sideC_text, 
+      tags: tags,
+      showSideB: showSideB,
+      showSideC: showSideC
+    };
 
     google.script.run
       .withSuccessHandler(function(result) {
@@ -599,7 +643,6 @@
     const cardId = card.id || card.FlashcardID || '';
     
     // Extract text content, attempt to separate from media tags for cleaner editing
-    // This is a simplified extraction. More robust parsing might be needed if tags are complex.
     const sideA_text = (card.sideA || card.FlashcardSideA || '');
     let sideB_text = (card.sideB || card.FlashcardSideB || '');
     let sideC_text = (card.sideC || card.FlashcardSideC || '');
@@ -614,6 +657,16 @@
     sideB_text = sideB_text.replace(/\[IMAGE:[^\]]+\]\s*/gi, '').trim();
     sideC_text = sideC_text.replace(/\[AUDIO:[^\]]+\]\s*|\[Source:[^\]]+\]\s*/gi, '').trim();
 
+    // Parse study configuration
+    let studyConfig = { showSideB: true, showSideC: true }; // Default configuration
+    if (card.StudyConfig) {
+      try {
+        const parsedConfig = JSON.parse(card.StudyConfig);
+        studyConfig = { ...studyConfig, ...parsedConfig };
+      } catch (e) {
+        console.error(`Error parsing study config for card ${cardId}:`, e);
+      }
+    }
 
     let tagsValue = '';
     if (Array.isArray(card.tags)) tagsValue = card.tags.join(', ');
@@ -651,6 +704,23 @@
         <div class="form-group">
           <label for="editCardTags-${cardId}" class="form-label">Tags</label>
           <input type="text" id="editCardTags-${cardId}" class="form-control" value="${escapeHtml(tagsValue)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Study Configuration</label>
+          <div class="checkbox-group">
+            <div class="checkbox-item">
+              <input type="checkbox" id="editStudySideA-${cardId}" checked disabled> 
+              <label for="editStudySideA-${cardId}">Side A (Always shown on front)</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="editStudySideB-${cardId}" ${studyConfig.showSideB ? 'checked' : ''}> 
+              <label for="editStudySideB-${cardId}">Show Side B on back</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="editStudySideC-${cardId}" ${studyConfig.showSideC ? 'checked' : ''}> 
+              <label for="editStudySideC-${cardId}">Show Side C on back</label>
+            </div>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn btn-secondary btn-sm" data-action="save-edit" data-card-id="${cardId}">Save</button>
@@ -758,6 +828,10 @@
     const sideB_text = document.getElementById(`editCardSideB-${cardId}`).value.trim();
     const sideC_text = document.getElementById(`editCardSideC-${cardId}`).value.trim();
     const tags = document.getElementById(`editCardTags-${cardId}`).value.trim();
+    
+    // Get study configuration
+    const showSideB = document.getElementById(`editStudySideB-${cardId}`).checked;
+    const showSideC = document.getElementById(`editStudySideC-${cardId}`).checked;
 
     if (!sideA_text) {
       handleError('Side A is required.');
@@ -770,7 +844,14 @@
     const imageUrl = document.getElementById(`editCardSideB-${cardId}`).dataset.imageUrl || null;
     const audioUrl = document.getElementById(`editCardSideC-${cardId}`).dataset.audioUrl || null;
         
-    const cardData = { sideA: sideA_text, sideB: sideB_text, sideC: sideC_text, tags: tags };
+    const cardData = { 
+      sideA: sideA_text, 
+      sideB: sideB_text, 
+      sideC: sideC_text, 
+      tags: tags,
+      showSideB: showSideB,
+      showSideC: showSideC
+    };
 
     google.script.run
       .withSuccessHandler(function(result) {
