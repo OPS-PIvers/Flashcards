@@ -448,3 +448,46 @@ function deleteDeck(deckName) {
     return { success: false, message: `Server error deleting deck: ${error.message}` };
   }
 }
+
+function debugAdminStatus(username) {
+  try {
+    const ss = getDatabaseSpreadsheet();
+    const configSheet = ss.getSheetByName('Config');
+    
+    if (!configSheet) {
+      return { error: "Config sheet not found" };
+    }
+    
+    const data = configSheet.getDataRange().getValues();
+    const headers = data[0];
+    const usernameIndex = headers.indexOf('UserName');
+    const isAdminIndex = headers.indexOf('IsAdmin');
+    
+    if (usernameIndex === -1 || isAdminIndex === -1) {
+      return { error: `Required columns not found. UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}` };
+    }
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[usernameIndex] && row[usernameIndex].toString().toLowerCase() === username.toLowerCase()) {
+        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
+        
+        return {
+          found: true,
+          row: i + 1,
+          rawValue: row[isAdminIndex],
+          rawType: typeof row[isAdminIndex],
+          cellValue: isAdminCell.getValue(),
+          cellValueType: typeof isAdminCell.getValue(),
+          valueAsString: String(row[isAdminIndex]),
+          isUppercaseTrue: String(row[isAdminIndex]).toUpperCase() === 'TRUE',
+          a1Notation: isAdminCell.getA1Notation()
+        };
+      }
+    }
+    
+    return { found: false, message: `User ${username} not found in Config sheet` };
+  } catch (error) {
+    return { error: error.message, stack: error.stack };
+  }
+}
