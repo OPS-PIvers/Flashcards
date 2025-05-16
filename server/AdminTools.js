@@ -1,601 +1,628 @@
 /**
- * Database Management Module for Flashcard App
- * Handles interactions with the Google Spreadsheet acting as the database.
+ * Admin Tools Module for Flashcard App
+ * Provides admin-specific functionality for managing decks, cards, and users.
+ * Relies on a global isUserAdmin() function (expected from Authentication.js)
+ * and getDatabaseSpreadsheet() (expected from Database.js or Code.js).
  */
 
 /**
- * Creates a new Google Spreadsheet to serve as the database.
- * This is typically called during app initialization.
+ * Gets admin access information.
+ * This function primarily serves as a server-side check that can be called
+ * by the client before attempting to load admin UI components.
  *
- * @param {string} name - Name for the new spreadsheet (e.g., "Flashcard App Database")
- * @return {Object} {id: string, url: string, spreadsheet: Spreadsheet}
+ * @return {Object} Admin access information
  */
-function createDatabaseSpreadsheet(name) {
-  const spreadsheet = SpreadsheetApp.create(name);
-  const id = spreadsheet.getId();
-  const url = spreadsheet.getUrl();
-
-  // Add the active user (creator) as an editor for immediate access
+function getAdminAccess() {
   try {
-    const activeUserEmail = Session.getActiveUser().getEmail();
-    if (activeUserEmail) { 
-      DriveApp.getFileById(id).addEditor(activeUserEmail);
+    const userProperties = PropertiesService.getUserProperties();
+    const sessionJson = userProperties.getProperty('session');
+    
+    if (!sessionJson) {
+      Logger.log("getAdminAccess: No session found");
+      return { success: true, isAdmin: false, message: 'Admin access required. You need to log in first.' };
     }
-  } catch (e) {
-    Logger.log(`Could not automatically add editor ${Session.getActiveUser().getEmail()} to spreadsheet ${id}: ${e.message}. Manual sharing might be needed.`);
-  }
-  
-  Logger.log(`Database spreadsheet created: Name='${name}', ID='${id}'`);
-  return { id, url, spreadsheet };
-}
-
-/**
- * Initializes the database structure with required sheets and basic data.
- * Called once when the application is first set up.
- *
- * @param {string} spreadsheetId - The ID of the database spreadsheet
- */
-function initializeDatabaseStructure(spreadsheetId) {
-  const ss = SpreadsheetApp.openById(spreadsheetId);
-
-  let configSheet = ss.getSheetByName('Sheet1');
-  if (configSheet) {
-    configSheet.setName('Config');
-  } else {
-    configSheet = ss.getSheetByName('Config') || ss.insertSheet('Config');
-  }
-  setupConfigSheet(configSheet);
-
-  const classesSheet = ss.getSheetByName('Classes') || ss.insertSheet('Classes');
-  setupClassesSheet(classesSheet);
-  
-  Logger.log(`Database structure initialized for spreadsheet ID: ${spreadsheetId}`);
-}
-
-/**
- * Sets up the 'Config' sheet with columns for user data and an initial admin user.
- *
- * @param {Sheet} sheet - The 'Config' sheet object
- */
-function setupConfigSheet(sheet) {
-  sheet.clearContents(); 
-  // Corrected headers for user configuration
-  const headers = [
-    'StudentFirst',   // Column A
-    'StudentLast',    // Column B
-    'UserName',       // Column C
-    'Password',       // Column D
-    'IsAdmin',        // Column E (Boolean - Checkbox preferred)
-    'DateCreated',    // Column F (Date user account created)
-    'LastLogin',      // Column G (Timestamp of last login)
-    'PreferredDeck',  // Column H (Optional: User's preferred deck)
-    'SessionDuration' // Column I (Optional: User's session duration preference in minutes)
-  ];
-  const headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange.setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
-  
-  // Set 'IsAdmin' column to be checkboxes for new rows
-  // This is a bit tricky to apply dynamically to all future rows, but for the header row
-  // and potentially the first data row, we can set data validation.
-  // For simplicity, admins would manually format this column as Checkbox or the code relies on true/false values.
-  // To ensure the 'IsAdmin' column is treated as boolean, we explicitly handle true/false strings/values.
-  // For existing sheets, users might need to format this column as Checkbox.
-
-  // Default admin user data aligned with new headers
-  const adminUser = [
-    'Admin',          // StudentFirst
-    'User',           // StudentLast
-    'admin',          // UserName
-    'password',       // Password
-    true,             // IsAdmin (true for boolean, or 'TRUE' for string)
-    new Date(),       // DateCreated
-    null,             // LastLogin (initially null or empty)
-    '',               // PreferredDeck
-    '60'              // SessionDuration
-  ];
-  sheet.getRange(2, 1, 1, adminUser.length).setValues([adminUser]);
-  // Make the IsAdmin cell for the admin user a checkbox if possible
-  try {
-      sheet.getRange(2, headers.indexOf('IsAdmin') + 1).insertCheckboxes();
-  } catch (e) {
-      Logger.log("Could not set 'IsAdmin' cell as checkbox for default admin, will use TRUE/FALSE values: " + e.message);
-  }
-
-
-  headers.forEach((_, i) => sheet.autoResizeColumn(i + 1));
-  Logger.log("'Config' sheet setup complete with default admin user and corrected headers.");
-}
-
-/**
- * Sets up the 'Classes' sheet with columns for class management.
- *
- * @param {Sheet} sheet - The 'Classes' sheet object
- */
-function setupClassesSheet(sheet) {
-  sheet.clearContents();
-  const headers = ['ClassName', 'ClassID', 'TeacherUsername', 'StudentUsernames', 'AssignedDecks'];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
-
-  const sampleClass = [
-    'Sample Class 101',
-    `class_${Utilities.getUuid().substring(0,6)}`,
-    'admin', 
-    JSON.stringify([]), 
-    JSON.stringify(['Sample_Deck']) 
-  ];
-  sheet.getRange(2, 1, 1, sampleClass.length).setValues([sampleClass]);
-  
-  headers.forEach((_, i) => sheet.autoResizeColumn(i + 1));
-  Logger.log("'Classes' sheet setup complete.");
-}
-
-/**
- * Creates a sample flashcard deck named 'Sample_Deck'.
- * Ensures StudyConfig is the 8th column (H).
- * @param {string} spreadsheetId - The ID of the database spreadsheet
- */
-function createSampleDeck(spreadsheetId) {
-  const ss = SpreadsheetApp.openById(spreadsheetId);
-  const deckName = 'Sample_Deck';
-  
-  let deckSheet = ss.getSheetByName(deckName);
-  if (deckSheet) {
-    deckSheet.clearContents(); 
-  } else {
-    deckSheet = ss.insertSheet(deckName);
-  }
-
-  // Ensure StudyConfig is the 8th column (H)
-  const headers = [
-    'FlashcardID',    // Column A
-    'FlashcardSideA', // Column B
-    'FlashcardSideB', // Column C
-    'FlashcardSideC', // Column D
-    'Tags',           // Column E
-    'DateCreated',    // Column F
-    'CreatedBy',      // Column G
-    'StudyConfig'     // Column H
-  ];
-  deckSheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
-
-  const defaultStudyConfig = JSON.stringify({ showSideB: true, showSideC: true, autoplayAudio: false });
-  const sampleCards = [
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the capital of France?', 'Paris', 'Hint: European city', 'geography,europe', new Date(), 'admin', defaultStudyConfig],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is 2 + 2?', '4', '', 'math,basics', new Date(), 'admin', defaultStudyConfig],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'Who wrote "Romeo and Juliet"?', 'William Shakespeare', 'Famous English playwright', 'literature,classics', new Date(), 'admin', defaultStudyConfig],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is H₂O (H2O)?', 'Water', 'Chemical formula', 'science,chemistry', new Date(), 'admin', defaultStudyConfig],
-    [`card_${Utilities.getUuid().substring(0,8)}`, 'What is the largest planet in our solar system?', 'Jupiter', 'A gas giant', 'science,astronomy', new Date(), 'admin', defaultStudyConfig]
-  ];
-  if (sampleCards.length > 0) {
-    // Ensure sampleCards rows match the number of headers
-    const dataToWrite = sampleCards.map(cardRow => {
-        if (cardRow.length < headers.length) {
-            // Pad row if it's shorter than headers (e.g. if StudyConfig was missing)
-            return cardRow.concat(Array(headers.length - cardRow.length).fill(''));
-        }
-        return cardRow.slice(0, headers.length); // Ensure it's not longer
-    });
-    deckSheet.getRange(2, 1, dataToWrite.length, headers.length).setValues(dataToWrite);
-  }
-  
-  headers.forEach((_, i) => deckSheet.autoResizeColumn(i + 1));
-  Logger.log(`'${deckName}' sheet setup complete with sample cards and StudyConfig as column H.`);
-}
-
-/**
- * Retrieves the database spreadsheet object.
- * Throws an error if the database ID is not configured.
- *
- * @return {Spreadsheet} The database spreadsheet
- * @throws {Error} If databaseId script property is not set.
- */
-function getDatabaseSpreadsheet() {
-  const databaseId = getScriptProperty('databaseId'); 
-  if (!databaseId) {
-    Logger.log("CRITICAL: Database ID script property not found.");
-    throw new Error('Database not initialized. Please run initialization or check Script Properties.');
-  }
-  try {
-    return SpreadsheetApp.openById(databaseId);
-  } catch (e) {
-    Logger.log(`CRITICAL: Failed to open database spreadsheet with ID '${databaseId}'. Error: ${e.message}`);
-    throw new Error(`Failed to access database. Ensure spreadsheet ID '${databaseId}' is valid and accessible. Original error: ${e.message}`);
-  }
-}
-
-/**
- * Gets a list of all available deck names (sheet names).
- *
- * @param {boolean} excludeSystemSheets - If true, 'Config' and 'Classes' sheets are excluded.
- * @return {Object} {success: boolean, decks?: Array<string>, message?: string}
- */
-function getAvailableDecks(excludeSystemSheets = true) {
-  try {
-    const ss = getDatabaseSpreadsheet();
-    const sheets = ss.getSheets();
-    const systemSheets = ['Config', 'Classes'];
-
-    const decks = sheets
-      .map(sheet => sheet.getName())
-      .filter(name => !excludeSystemSheets || !systemSheets.includes(name));
-
+    
+    const session = JSON.parse(sessionJson);
+    Logger.log(`getAdminAccess: Session data: ${JSON.stringify(session)}`);
+    
+    if (!session || typeof session !== 'object' || !session.isValid) {
+      Logger.log("getAdminAccess: Invalid session");
+      return { success: true, isAdmin: false, message: 'Admin access required. Invalid session.' };
+    }
+    
+    const username = session.userName;
+    if (!username) {
+      Logger.log("getAdminAccess: No username in session");
+      return { success: true, isAdmin: false, message: 'Admin access required. Invalid username.' };
+    }
+    
+    const isAdmin = forceAdminCheck(username);
+    Logger.log(`getAdminAccess: Direct admin check result for ${username}: ${isAdmin}`);
+    
     return {
       success: true,
-      decks: decks
+      isAdmin: isAdmin,
+      message: isAdmin ? 'Admin access verified.' : 'Admin access required. You do not have sufficient permissions.'
     };
   } catch (error) {
-    Logger.log(`Error in getAvailableDecks: ${error.message}\nStack: ${error.stack}`);
-    return { success: false, message: `Server error getting available decks: ${error.message}` };
+    Logger.log(`Error in getAdminAccess: ${error.message}\nStack: ${error.stack}`);
+    return { success: false, isAdmin: false, message: `Error checking admin access: ${error.message}` };
   }
 }
 
-/**
- * Retrieves all flashcards from a specific deck sheet.
- * Returns full card objects including all defined columns.
- * Ensures all returned values are JSON-serializable primitives or arrays of primitives.
- *
- * @param {string} deckName - The name of the deck (sheet name)
- * @return {Array<Object>} Array of flashcard objects. Each object's keys are the header names.
- * @throws {Error} If deck not found or required columns are missing.
- */
-function getDeckFlashcards(deckName) {
-  const ss = getDatabaseSpreadsheet();
-  const sheet = ss.getSheetByName(deckName);
-
-  if (!sheet) {
-    Logger.log(`Deck not found: ${deckName}`);
-    throw new Error(`Deck "${deckName}" not found.`);
-  }
-
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 1) { 
-      Logger.log(`Deck "${deckName}" is empty or has no headers.`);
-      return []; 
-  }
-  const headers = data[0].map(h => String(h).trim()); 
-
-  const requiredColumns = ['FlashcardID', 'FlashcardSideA', 'FlashcardSideB'];
-  for (const col of requiredColumns) {
-    if (!headers.includes(col)) {
-      Logger.log(`Deck "${deckName}" is missing required column: ${col}`);
-      throw new Error(`Deck "${deckName}" is missing required column: "${col}". Please check sheet headers.`);
-    }
-  }
-
-  const flashcards = [];
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const card = {};
-    let hasEssentialData = true; 
-
-    headers.forEach((header, index) => {
-      let value = row[index];
-      // Ensure value is JSON serializable: convert Dates to ISO strings, others to string/number/boolean
-      if (value instanceof Date) {
-        card[header] = value.toISOString();
-      } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) {
-        card[header] = value;
-      } else {
-        // For any other complex types or if unsure, convert to string.
-        card[header] = value != null ? String(value) : null;
-      }
-
-      if (requiredColumns.includes(header) && (card[header] === null || String(card[header]).trim() === '')) {
-          if (header === 'FlashcardID') hasEssentialData = false; 
-      }
-    });
-    
-    if (hasEssentialData && card.FlashcardID && card.FlashcardSideA && card.FlashcardSideB) {
-        if (headers.includes('Tags') && typeof card['Tags'] === 'string') { 
-            card['Tags'] = card['Tags'].split(',').map(tag => tag.trim()).filter(tag => tag);
-        } else if (headers.includes('Tags')) { // If Tags column exists but value isn't a string (e.g. null or already processed)
-            if (Array.isArray(card['Tags'])) {
-              // Value is already an array, do nothing or ensure elements are strings if necessary
-            } else {
-              card['Tags'] = []; 
-            }
-        }
-        flashcards.push(card);
-    } else {
-        Logger.log(`Skipping row ${i+1} in deck "${deckName}" due to missing essential data (ID, SideA, or SideB). Card data: ${JSON.stringify(card)}`);
-    }
-  }
-  return flashcards;
-}
-
-
-// server/Database.js - Update the getUserData function
-
-/**
- * Retrieves user data from the 'Config' sheet based on username.
- *
- * @param {string} username - Username to look up (case-insensitive)
- * @return {Object|null} User data object or null if not found. Includes Password for authentication.
- */
-function getUserData(username) {
-  try {
-    const ss = getDatabaseSpreadsheet();
-    const configSheet = ss.getSheetByName('Config');
-    if (!configSheet) {
-        Logger.log("CRITICAL: 'Config' sheet not found during getUserData.");
-        return null;
-    }
-
-    const data = configSheet.getDataRange().getValues();
-    const headers = data[0].map(h => String(h).trim());
-    const usernameIndex = headers.indexOf('UserName');
-    const isAdminIndex = headers.indexOf('IsAdmin');
-    
-    // Debug log to see if IsAdmin column exists
-    Logger.log(`getUserData: Looking for user "${username}". Headers: ${JSON.stringify(headers)}. UserName column index: ${usernameIndex}, IsAdmin column index: ${isAdminIndex}`);
-
-    if (usernameIndex === -1) {
-      Logger.log("CRITICAL: 'UserName' column not found in 'Config' sheet.");
-      return null; 
-    }
-
-    const lowerCaseUsername = username.toLowerCase();
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === lowerCaseUsername) {
-        // Found the user
-        let isAdminValue = false; // Default to false
-        
-        if (isAdminIndex !== -1) {
-          try {
-            const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
-            const cellValue = isAdminCell.getValue();
-            // Checkbox state
-            const isChecked = isAdminCell.isChecked(); 
-            if (isChecked !== null) { // isChecked() returns true/false, or null if not a checkbox
-                isAdminValue = isChecked;
-            } else { // Fallback to value if not a checkbox or isChecked() fails
-                isAdminValue = cellValue === true || String(cellValue).toUpperCase() === 'TRUE';
-            }
-            Logger.log(`Raw IsAdmin cell value for ${username}: ${cellValue}; isChecked: ${isChecked}; Determined isAdminValue: ${isAdminValue}`);
-          } catch (checkboxErr) {
-            Logger.log(`Error getting checkbox state for user ${username}: ${checkboxErr.message}. Falling back to direct value check.`);
-            // Fallback to direct value check from 'data' array if getRange/isChecked fails
-            isAdminValue = row[isAdminIndex] === true || 
-                         String(row[isAdminIndex]).toUpperCase() === 'TRUE';
-          }
-        } else {
-            Logger.log(`IsAdmin column not found in Config. Defaulting ${username} to non-admin.`);
-        }
-        
-        // Build user object manually
-        const user = {};
-        headers.forEach((header, index) => {
-            if (header === 'IsAdmin') {
-              user[header] = isAdminValue; // Use our determined boolean value
-            } else {
-              let value = row[index];
-              if (value instanceof Date) {
-                  user[header] = value.toISOString();
-              } else {
-                  user[header] = value;
-              }
-            }
-        });
-        
-        Logger.log(`User data retrieved for ${username}: ${JSON.stringify(user)}`);
-        return user;
-      }
-    }
-    Logger.log(`User ${username} not found in Config sheet.`);
-    return null; // User not found
-  } catch (error) {
-    Logger.log(`Error in getUserData for "${username}": ${error.message}\nStack: ${error.stack}`);
-    return null;
-  }
-}
-
-/**
- * Updates the 'LastLogin' timestamp for a specified user in the 'Config' sheet.
- *
- * @param {string} username - The username (case-insensitive)
- */
-function updateUserLastLogin(username) {
-  try {
-    const ss = getDatabaseSpreadsheet();
-    const configSheet = ss.getSheetByName('Config');
-     if (!configSheet) {
-        Logger.log("CRITICAL: 'Config' sheet not found during updateUserLastLogin.");
-        return;
-    }
-
-    const data = configSheet.getDataRange().getValues();
-    const headers = data[0].map(h => String(h).trim());
-    const usernameIndex = headers.indexOf('UserName');
-    const lastLoginIndex = headers.indexOf('LastLogin');
-
-    if (usernameIndex === -1 || lastLoginIndex === -1) {
-      Logger.log("CRITICAL: 'UserName' or 'LastLogin' column not found in 'Config' sheet.");
-      return; 
-    }
-
-    const lowerCaseUsername = username.toLowerCase();
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][usernameIndex] && String(data[i][usernameIndex]).toLowerCase() === lowerCaseUsername) {
-        configSheet.getRange(i + 1, lastLoginIndex + 1).setValue(new Date());
-        Logger.log(`Updated LastLogin for user: ${username}`);
-        return;
-      }
-    }
-    Logger.log(`User not found for LastLogin update: ${username}`);
-  } catch (error) {
-    Logger.log(`Error in updateUserLastLogin for "${username}": ${error.message}\nStack: ${error.stack}`);
-  }
-}
-
-/**
- * Adds a new user to the 'Config' sheet.
- * Intended for admin use; direct calls should be secured.
- *
- * @param {Object} userData - User data object. Must include UserName, Password.
- *                            Optional: StudentFirst, StudentLast, IsAdmin.
- * @return {Object} {success: boolean, message: string}
- */
-function addUser(userData) {
-  // Admin check should be done in the calling function (e.g., from AdminTools.js)
-  // For direct calls from server-side not triggered by client, this is okay.
-  // If called from client via google.script.run, the client-facing server function must do the check.
-
-  if (!userData || !userData.UserName || !userData.Password) {
-    return { success: false, message: "UserName and Password are required to add a new user." };
-  }
-
-  try {
-    const ss = getDatabaseSpreadsheet();
-    const configSheet = ss.getSheetByName('Config');
-    if (!configSheet) {
-        return { success: false, message: "CRITICAL: 'Config' sheet not found." };
-    }
-
-    const data = configSheet.getDataRange().getValues();
-    const headers = data[0].map(h => String(h).trim()); // These are the corrected user config headers
-    const usernameIndex = headers.indexOf('UserName');
-
-    const userExists = data.slice(1).some(row =>
-      row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === userData.UserName.toLowerCase()
-    );
-
-    if (userExists) {
-      return { success: false, message: `User "${userData.UserName}" already exists.` };
-    }
-
-    const newRowValues = headers.map(header => {
-      switch(header) {
-        case 'StudentFirst': return userData.StudentFirst || '';
-        case 'StudentLast': return userData.StudentLast || '';
-        case 'UserName': return userData.UserName;
-        case 'Password': return userData.Password; 
-        case 'IsAdmin': return userData.IsAdmin === true || String(userData.IsAdmin).toUpperCase() === 'TRUE'; // Store as boolean
-        case 'DateCreated': return new Date(); 
-        case 'LastLogin': return null; 
-        case 'PreferredDeck': return userData.PreferredDeck || '';
-        case 'SessionDuration': return userData.SessionDuration || '60'; // Default to '60' if not provided
-        default: return ''; // For any other unexpected headers
-      }
-    });
-    
-    const newRowIndex = configSheet.getLastRow() + 1;
-    configSheet.getRange(newRowIndex, 1, 1, newRowValues.length).setValues([newRowValues]);
-
-    // Attempt to format 'IsAdmin' cell as checkbox for the new user
-    const isAdminColIndex = headers.indexOf('IsAdmin');
-    if (isAdminColIndex !== -1) {
-        try {
-            configSheet.getRange(newRowIndex, isAdminColIndex + 1).insertCheckboxes();
-        } catch (e) {
-            Logger.log(`Could not set 'IsAdmin' cell as checkbox for new user ${userData.UserName}: ${e.message}`);
-        }
-    }
-
-    Logger.log(`New user added: ${userData.UserName}`);
-    return { success: true, message: `User "${userData.UserName}" added successfully.` };
-
-  } catch (error) {
-    Logger.log(`Error in addUser for "${userData.UserName}": ${error.message}\nStack: ${error.stack}`);
-    return { success: false, message: `Server error adding user: ${error.message}` };
-  }
-}
-
-// Add this to server/Database.js - New function to get admin status directly
-
-function isUserAdminInSheet(username) {
+function forceAdminCheck(username) {
   return getIsUserAdmin(username);
 }
 
-
 /**
- * Improved admin status verification that accounts for column name variations
- * and checkbox state for 'IsAdmin' column in the 'Config' sheet.
- * 
- * @param {string} username - The username to check
- * @return {boolean} True if the user is an admin, false otherwise
+ * Creates a new flashcard deck.
+ * Only accessible by admin users.
+ *
+ * @param {string} deckName - Name for the new deck
+ * @return {Object} Result of operation {success: boolean, message: string}
  */
-function getIsUserAdmin(username) {
+function createDeck(deckName) {
   try {
-    if (!username || typeof username !== 'string') {
-      Logger.log("getIsUserAdmin: Invalid username parameter (null, undefined, or not a string)");
-      return false;
+    const session = getUserSession(); // From Authentication.js
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to create decks.' };
     }
     
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can create decks.' };
+    }
+
+    if (!deckName || deckName.trim() === '') {
+      return { success: false, message: 'Deck name cannot be empty.' };
+    }
+
+    const cleanDeckName = deckName.trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_');
+    if (!cleanDeckName) {
+        return { success: false, message: 'Invalid deck name after sanitization. Please use alphanumeric characters, spaces, or hyphens.' };
+    }
+
+    const ss = getDatabaseSpreadsheet(); // From Database.js
+    const existingSheet = ss.getSheetByName(cleanDeckName);
+    if (existingSheet) {
+      return { success: false, message: `Deck "${cleanDeckName}" already exists.` };
+    }
+
+    const newSheet = ss.insertSheet(cleanDeckName);
+    // Ensure StudyConfig is the 8th column (H)
+    const headers = [
+      'FlashcardID',    // Column A
+      'FlashcardSideA', // Column B
+      'FlashcardSideB', // Column C
+      'FlashcardSideC', // Column D
+      'Tags',           // Column E
+      'DateCreated',    // Column F
+      'CreatedBy',      // Column G
+      'StudyConfig'     // Column H
+    ];
+    newSheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
+    headers.forEach((_, i) => newSheet.autoResizeColumn(i + 1));
+
+    Logger.log(`Admin "${session.userName}" created deck: ${cleanDeckName}`);
+    return { success: true, message: `Deck "${cleanDeckName}" created successfully.` };
+  } catch (error) {
+    Logger.log(`Error in createDeck (Deck: ${deckName}): ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error creating deck: ${error.message}` };
+  }
+}
+
+/**
+ * Adds a new flashcard to a specified deck.
+ * Handles embedding of image and audio URLs into card data.
+ * Only accessible by admin users.
+ *
+ * @param {string} deckName - Name of the deck
+ * @param {Object} cardData - Card data {sideA, sideB, sideC, tags, showSideB, showSideC, autoplayAudio}
+ * @param {string|null} imageUrlToEmbed - URL of the image to embed in Side B
+ * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C
+ * @param {string|null} audioUrlToEmbedSideA - URL of the audio to embed in Side A
+ * @return {Object} Result of operation {success: boolean, message: string, cardId?: string}
+ */
+function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed, audioUrlToEmbedSideA) {
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to add flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can add flashcards.' };
+    }
+
+    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
+      return { success: false, message: 'Card Side A is required.' };
+    }
+    
+    // Process Side A content with audio if provided
+    let finalSideA = (cardData.sideA || '').trim();
+    if (audioUrlToEmbedSideA) {
+      const audioTagA = `[AUDIO:${audioUrlToEmbedSideA}]`;
+      // Add audio tag to Side A
+      if (!finalSideA.includes(audioTagA)) {
+        finalSideA = audioTagA + (finalSideA ? ' ' + finalSideA : '');
+      }
+    }
+    
+    let finalSideB = (cardData.sideB || '').trim();
+    let finalSideC = (cardData.sideC || '').trim();
+    let sources = [];
+
+    if (imageUrlToEmbed) {
+      const imageTag = `[IMAGE:${imageUrlToEmbed}]`;
+      // Prepend image tag to Side B if not already there to ensure it's visible first
+      if (!finalSideB.includes(imageTag)) {
+        finalSideB = imageTag + (finalSideB ? '\n' + finalSideB : '');
+      }
+      sources.push('Pixabay');
+    }
+
+    if (audioUrlToEmbed) {
+      const audioTag = `[AUDIO:${audioUrlToEmbed}]`;
+      // Append audio tag to Side C
+      if (!finalSideC.includes(audioTag)) {
+        finalSideC = finalSideC + (finalSideC ? '\n' : '') + audioTag;
+      }
+      sources.push('VoiceRSS');
+    }
+    
+    if (sources.length > 0) {
+        const sourceTag = `[Source: ${sources.join(', ')} for "${cardData.sideA.trim()}"]`;
+        if (!finalSideC.includes(sourceTag)) {
+            finalSideC = finalSideC + (finalSideC ? '\n' : '') + sourceTag;
+        }
+    }
+
+    const ss = getDatabaseSpreadsheet();
+    const sheet = ss.getSheetByName(deckName);
+    if (!sheet) {
+      return { success: false, message: `Deck "${deckName}" not found.` };
+    }
+
+    const cardId = `card_${Utilities.getUuid().substring(0, 8)}`;
+    const showSideB = cardData.showSideB !== false; // Default to true if not specified
+    const showSideC = cardData.showSideC !== false; // Default to true if not specified
+    const autoplayAudio = cardData.autoplayAudio === true; // Default to false if not specified
+    const studyConfig = JSON.stringify({ 
+      showSideB, 
+      showSideC, 
+      autoplayAudio 
+    });
+
+    // newCardRow must align with the headers defined in createDeck
+    const newCardRow = [
+      cardId,                   // FlashcardID
+      finalSideA.trim(),        // FlashcardSideA
+      finalSideB.trim(),        // FlashcardSideB
+      finalSideC.trim(),        // FlashcardSideC
+      (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(','), // Tags
+      new Date(),               // DateCreated
+      session.userName,         // CreatedBy
+      studyConfig               // StudyConfig (8th element)
+    ];
+
+    sheet.appendRow(newCardRow);
+    Logger.log(`Admin "${session.userName}" added card "${cardId}" to deck: ${deckName} with media.`);
+    return { success: true, message: 'Flashcard added successfully.', cardId: cardId };
+  } catch (error) {
+    Logger.log(`Error in addFlashcard (Deck: ${deckName}, CardData: ${JSON.stringify(cardData)}): ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error adding flashcard: ${error.message}` };
+  }
+}
+
+/**
+ * Retrieves a list of all users from the Config sheet.
+ * Only accessible by admin users.
+ *
+ * @return {Object} {success: boolean, users?: Array<Object>, message?: string}
+ */
+function getUsers() {
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to view user lists.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can view user lists.' };
+    }
+
+    const ss = getDatabaseSpreadsheet();
+    const configSheet = ss.getSheetByName('Config');
+    if (!configSheet) {
+        return { success: false, message: "Configuration sheet ('Config') not found."};
+    }
+    const data = configSheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim());
+    const passwordHeaderIndex = headers.indexOf('Password');
+
+    const users = data.slice(1).map(row => {
+      const user = {};
+      headers.forEach((header, index) => {
+        if (passwordHeaderIndex !== -1 && index === passwordHeaderIndex) {
+          // Do not include password
+        } else {
+          // Ensure IsAdmin is boolean
+          if (header === 'IsAdmin') {
+             const isAdminCell = configSheet.getRange(data.indexOf(row) + 1, index + 1); // Get actual row index
+             let isChecked = false;
+             try { isChecked = isAdminCell.isChecked(); } catch(e){}
+             user[header] = row[index] === true || String(row[index]).toUpperCase() === 'TRUE' || isChecked === true;
+          } else if (row[index] instanceof Date) {
+             user[header] = row[index].toISOString();
+          }
+          else {
+            user[header] = row[index];
+          }
+        }
+      });
+      return user;
+    });
+
+    return { success: true, users: users };
+  } catch (error) {
+    Logger.log(`Error in getUsers: ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error retrieving users: ${error.message}` };
+  }
+}
+
+/**
+ * Deletes a specific flashcard from a deck.
+ * Only accessible by admin users.
+ *
+ * @param {string} deckName - Name of the deck
+ * @param {string} cardId - ID of the flashcard to delete
+ * @return {Object} Result of operation {success: boolean, message: string}
+ */
+function deleteFlashcard(deckName, cardId) {
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to delete flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can delete flashcards.' };
+    }
+
+    const ss = getDatabaseSpreadsheet();
+    const sheet = ss.getSheetByName(deckName);
+    if (!sheet) {
+      return { success: false, message: `Deck "${deckName}" not found.` };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim());
+    const idIndex = headers.indexOf('FlashcardID');
+    if (idIndex === -1) {
+      return { success: false, message: 'FlashcardID column not found in the deck.' };
+    }
+
+    let rowIndexToDelete = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === cardId) {
+        rowIndexToDelete = i + 1; 
+        break;
+      }
+    }
+
+    if (rowIndexToDelete === -1) {
+      return { success: false, message: `Card ID "${cardId}" not found in deck "${deckName}".` };
+    }
+
+    sheet.deleteRow(rowIndexToDelete);
+    Logger.log(`Admin "${session.userName}" deleted card "${cardId}" from deck: ${deckName}`);
+    return { success: true, message: 'Flashcard deleted successfully.' };
+  } catch (error) {
+    Logger.log(`Error in deleteFlashcard (Deck: ${deckName}, CardID: ${cardId}): ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error deleting flashcard: ${error.message}` };
+  }
+}
+
+/**
+ * Updates an existing flashcard in a deck.
+ * Handles embedding of image and audio URLs into card data.
+ * Only accessible by admin users.
+ *
+ * @param {string} deckName - Name of the deck
+ * @param {string} cardId - ID of the flashcard to update
+ * @param {Object} cardData - Updated card data {sideA, sideB, sideC, tags, showSideB, showSideC, autoplayAudio}
+ * @param {string|null} imageUrlToEmbed - URL of the image to embed in Side B
+ * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C
+ * @param {string|null} audioUrlToEmbedSideA - URL of the audio to embed in Side A
+ * @return {Object} Result of operation {success: boolean, message: string}
+ */
+function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlToEmbed, audioUrlToEmbedSideA) {
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to update flashcards.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can update flashcards.' };
+    }
+    
+    if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
+      return { success: false, message: 'Card Side A is required for update.' };
+    }
+
+    const ss = getDatabaseSpreadsheet();
+    const sheet = ss.getSheetByName(deckName);
+    if (!sheet) {
+      return { success: false, message: `Deck "${deckName}" not found.` };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim());
+    const idIndex = headers.indexOf('FlashcardID');
+    const sideAIndex = headers.indexOf('FlashcardSideA');
+    const sideBIndex = headers.indexOf('FlashcardSideB');
+    const sideCIndex = headers.indexOf('FlashcardSideC');
+    const tagsIndex = headers.indexOf('Tags');
+    const studyConfigIndex = headers.indexOf('StudyConfig'); // Will be 7 if StudyConfig is 8th header
+
+    if (idIndex === -1 || sideAIndex === -1 || sideBIndex === -1 || sideCIndex === -1 || tagsIndex === -1) {
+      return { success: false, message: 'One or more required columns (FlashcardID, FlashcardSideA, FlashcardSideB, FlashcardSideC, Tags) not found in the deck.' };
+    }
+    // StudyConfigIndex can be -1 if the deck was created before this fix and doesn't have the column.
+    // In that case, study config won't be updated.
+
+    let rowIndexToUpdate = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === cardId) {
+        rowIndexToUpdate = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndexToUpdate === -1) {
+      return { success: false, message: `Card ID "${cardId}" not found in deck "${deckName}" for update.` };
+    }
+
+    // Process Side A with audio if provided
+    let finalSideA = (cardData.sideA || '').trim();
+    if (audioUrlToEmbedSideA) {
+      const audioTagA = `[AUDIO:${audioUrlToEmbedSideA}]`;
+      if (!finalSideA.includes(audioTagA)) {
+        finalSideA = audioTagA + (finalSideA ? ' ' + finalSideA : '');
+      }
+    } else {
+      // Remove any existing audio tags from Side A text
+      finalSideA = finalSideA.replace(/\[AUDIO:[^\]]+\]\s*/gi, '').trim();
+    }
+
+    let currentSideB = sheet.getRange(rowIndexToUpdate, sideBIndex + 1).getValue() || '';
+    let currentSideC = sheet.getRange(rowIndexToUpdate, sideCIndex + 1).getValue() || '';
+
+    // Clear old media tags from current content before adding new/updated text
+    currentSideB = String(currentSideB).replace(/\[IMAGE:[^\]]+\]\s*/gi, '').trim();
+    currentSideC = String(currentSideC).replace(/\[AUDIO:[^\]]+\]\s*/gi, '').replace(/\[Source:[^\]]+\]\s*/gi, '').trim();
+    
+    // Prepend/Append user-provided text
+    let finalSideB = (cardData.sideB || '').trim();
+    let finalSideC = (cardData.sideC || '').trim();
+    
+    // If user text for SideB/SideC was provided, use it, otherwise use the cleaned current content
+    finalSideB = cardData.sideB !== undefined ? (cardData.sideB || '').trim() : currentSideB;
+    finalSideC = cardData.sideC !== undefined ? (cardData.sideC || '').trim() : currentSideC;
+
+    let sources = [];
+
+    if (imageUrlToEmbed) {
+      const imageTag = `[IMAGE:${imageUrlToEmbed}]`;
+      if (!finalSideB.includes(imageTag)) { // Avoid duplicate tags if user manually added one
+         finalSideB = imageTag + (finalSideB ? '\n' + finalSideB : '');
+      }
+      sources.push('Pixabay');
+    }
+
+    if (audioUrlToEmbed) {
+      const audioTag = `[AUDIO:${audioUrlToEmbed}]`;
+       if (!finalSideC.includes(audioTag)) {
+          finalSideC = finalSideC + (finalSideC ? '\n' : '') + audioTag;
+       }
+      sources.push('VoiceRSS');
+    }
+    
+    if (sources.length > 0) {
+        const sourceTag = `[Source: ${sources.join(', ')} for "${cardData.sideA.trim()}"]`;
+        if (!finalSideC.includes(sourceTag)) {
+            finalSideC = finalSideC + (finalSideC ? '\n' : '') + sourceTag;
+        }
+    }
+
+    sheet.getRange(rowIndexToUpdate, sideAIndex + 1).setValue(finalSideA.trim());
+    sheet.getRange(rowIndexToUpdate, sideBIndex + 1).setValue(finalSideB.trim());
+    sheet.getRange(rowIndexToUpdate, sideCIndex + 1).setValue(finalSideC.trim());
+    
+    const normalizedTags = (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(',');
+    sheet.getRange(rowIndexToUpdate, tagsIndex + 1).setValue(normalizedTags);
+    
+    // Update study configuration only if the column exists
+    if (studyConfigIndex !== -1) {
+      const showSideB = cardData.showSideB !== false;
+      const showSideC = cardData.showSideC !== false;
+      const autoplayAudio = cardData.autoplayAudio === true;
+      const studyConfigJSON = JSON.stringify({
+        showSideB,
+        showSideC,
+        autoplayAudio
+      });
+      sheet.getRange(rowIndexToUpdate, studyConfigIndex + 1).setValue(studyConfigJSON);
+    } else {
+      Logger.log(`StudyConfig column not found in deck "${deckName}". Study configuration for card "${cardId}" was not updated.`);
+    }
+
+    Logger.log(`Admin "${session.userName}" updated card "${cardId}" in deck: ${deckName} with media.`);
+    return { success: true, message: 'Flashcard updated successfully.' };
+  } catch (error) {
+    Logger.log(`Error in updateFlashcard (Deck: ${deckName}, CardID: ${cardId}, Data: ${JSON.stringify(cardData)}): ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error updating flashcard: ${error.message}` };
+  }
+}
+
+/**
+ * Deletes an entire deck (sheet).
+ * Only accessible by admin users. System sheets cannot be deleted.
+ *
+ * @param {string} deckName - Name of the deck to delete
+ * @return {Object} Result of operation {success: boolean, message: string}
+ */
+function deleteDeck(deckName) {
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'Permission denied: You must be logged in to delete decks.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName);
+    if (!isAdmin) {
+      return { success: false, message: 'Permission denied: Only administrators can delete decks.' };
+    }
+
+    const ss = getDatabaseSpreadsheet();
+    const sheet = ss.getSheetByName(deckName);
+    if (!sheet) {
+      return { success: false, message: `Deck "${deckName}" not found.` };
+    }
+
+    const systemSheets = ['Config', 'Classes']; 
+    if (systemSheets.includes(deckName)) {
+      return { success: false, message: `Cannot delete system sheet "${deckName}".` };
+    }
+
+    ss.deleteSheet(sheet);
+    Logger.log(`Admin "${session.userName}" deleted deck: ${deckName}`);
+    return { success: true, message: `Deck "${deckName}" deleted successfully.` };
+  } catch (error) {
+    Logger.log(`Error in deleteDeck (Deck: ${deckName}): ${error.message}\nStack: ${error.stack}`);
+    return { success: false, message: `Server error deleting deck: ${error.message}` };
+  }
+}
+
+function debugAdminStatus(username) {
+  try {
     const ss = getDatabaseSpreadsheet();
     const configSheet = ss.getSheetByName('Config');
     
     if (!configSheet) {
-      Logger.log("getIsUserAdmin: Config sheet not found");
-      return false;
+      return { error: "Config sheet not found" };
     }
     
     const data = configSheet.getDataRange().getValues();
-    if (data.length <= 1) {
-      Logger.log("getIsUserAdmin: Config sheet has no data or only headers");
-      return false;
+    const headers = data[0];
+    const usernameIndex = headers.indexOf('UserName');
+    const isAdminIndex = headers.indexOf('IsAdmin');
+    
+    if (usernameIndex === -1 || isAdminIndex === -1) {
+      return { error: `Required columns not found. UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}` };
     }
     
-    const headers = data[0].map(h => String(h).trim());
-    Logger.log("getIsUserAdmin: Config sheet headers: " + JSON.stringify(headers));
-    
-    let usernameIndex = headers.findIndex(h => h.toLowerCase() === 'username');
-    let isAdminIndex = headers.findIndex(h => h.toLowerCase() === 'isadmin');
-        
-    Logger.log(`getIsUserAdmin: Column indices - UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}`);
-    
-    if (usernameIndex === -1) {
-      Logger.log("getIsUserAdmin: 'UserName' column not found in Config sheet headers.");
-      return false; // Cannot identify user without UserName column
-    }
-    
-    // If IsAdmin column is not found, no user can be admin unless a special fallback for 'admin' user.
-    if (isAdminIndex === -1) {
-      Logger.log("getIsUserAdmin: 'IsAdmin' column not found in Config sheet headers.");
-      if (username.toLowerCase() === 'admin') {
-          Logger.log("getIsUserAdmin: 'IsAdmin' column missing, but username is 'admin'. Defaulting 'admin' to admin role as a fallback.");
-          return true; // Fallback for 'admin' user if IsAdmin column is missing
-      }
-      return false; // Other users cannot be admin if IsAdmin column is missing
-    }
-    
-    const lowerCaseUsername = username.toLowerCase();
-    for (let i = 1; i < data.length; i++) { // Start from 1 to skip header row
+    for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const currentUsername = String(row[usernameIndex] || "").toLowerCase();
-      
-      if (currentUsername === lowerCaseUsername) {
-        // Found the user, now check IsAdmin status
-        let isAdminStatus = false;
-        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1); // Sheet rows are 1-indexed, i is 0-indexed for data array
+      if (row[usernameIndex] && row[usernameIndex].toString().toLowerCase() === username.toLowerCase()) {
+        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
         
-        try {
-          const isChecked = isAdminCell.isChecked();
-          if (isChecked !== null) { // isChecked() returns true/false for checkboxes, null otherwise
-            isAdminStatus = isChecked;
-            Logger.log(`getIsUserAdmin: User "${username}", IsAdmin cell is checkbox, checked: ${isAdminStatus}`);
-          } else {
-            // Cell is not a checkbox or isChecked() is not supported/failed, fall back to value
-            const cellValue = isAdminCell.getValue();
-            isAdminStatus = cellValue === true || String(cellValue).toUpperCase() === 'TRUE';
-            Logger.log(`getIsUserAdmin: User "${username}", IsAdmin cell not checkbox or isChecked failed. Value: "${cellValue}", Determined: ${isAdminStatus}`);
-          }
-        } catch (e) {
-          // Error accessing cell as checkbox, fallback to raw data value
-          Logger.log(`getIsUserAdmin: Error checking IsAdmin cell for "${username}": ${e.message}. Falling back to raw data value.`);
-          const rawValue = row[isAdminIndex];
-          isAdminStatus = rawValue === true || String(rawValue).toUpperCase() === 'TRUE';
-        }
-        
-        Logger.log(`getIsUserAdmin: Final admin status for "${username}": ${isAdminStatus}`);
-        return isAdminStatus;
+        return {
+          found: true,
+          row: i + 1,
+          rawValue: row[isAdminIndex],
+          rawType: typeof row[isAdminIndex],
+          cellValue: isAdminCell.getValue(),
+          cellValueType: typeof isAdminCell.getValue(),
+          valueAsString: String(row[isAdminIndex]),
+          isUppercaseTrue: String(row[isAdminIndex]).toUpperCase() === 'TRUE',
+          a1Notation: isAdminCell.getA1Notation()
+        };
       }
     }
     
-    Logger.log(`getIsUserAdmin: User "${username}" not found in Config sheet.`);
-    return false;
+    return { found: false, message: `User ${username} not found in Config sheet` };
   } catch (error) {
-    Logger.log(`CRITICAL Error in getIsUserAdmin for "${username}": ${error.message}\nStack: ${error.stack}`);
-    return false; // Default to false on error
+    return { error: error.message, stack: error.stack };
+  }
+}
+
+/**
+ * Diagnostic function to examine the Config sheet structure
+ * Call this from the server console to debug configuration issues
+ */
+function diagnoseConfigSheet() {
+  try {
+    const ss = getDatabaseSpreadsheet();
+    const configSheet = ss.getSheetByName('Config');
+    
+    if (!configSheet) {
+      Logger.log("DIAGNOSIS: Config sheet not found");
+      return { error: "Config sheet not found" };
+    }
+    
+    const numRows = configSheet.getLastRow();
+    const numCols = configSheet.getLastColumn();
+    Logger.log(`DIAGNOSIS: Config sheet dimensions: ${numRows} rows × ${numCols} columns`);
+    
+    // Get headers
+    const headers = configSheet.getRange(1, 1, 1, numCols).getValues()[0];
+    Logger.log(`DIAGNOSIS: Config sheet headers: ${JSON.stringify(headers)}`);
+    
+    // Check for admin user row
+    const allData = configSheet.getDataRange().getValues();
+    let adminRowIndex = -1;
+    let adminRowData = null;
+    
+    // Assuming UserName is a unique identifier for admin, typically the value 'admin'
+    // Find the UserName column index first from the actual headers
+    let userNameColIndex = -1;
+    for(let h=0; h < headers.length; h++) {
+      if (String(headers[h]).toLowerCase() === 'username') {
+        userNameColIndex = h;
+        break;
+      }
+    }
+
+    if (userNameColIndex === -1) {
+      Logger.log("DIAGNOSIS: UserName column not found in Config sheet headers.");
+      return { error: "UserName column not found in Config sheet headers." };
+    }
+    
+    for (let i = 1; i < allData.length; i++) { // Start from 1 to skip header row
+      if (allData[i][userNameColIndex] && String(allData[i][userNameColIndex]).toLowerCase() === 'admin') { 
+        adminRowIndex = i;
+        adminRowData = allData[i];
+        break;
+      }
+    }
+    
+    if (adminRowIndex === -1) {
+      Logger.log("DIAGNOSIS: Default 'admin' user not found in Config sheet");
+      // This is not necessarily an error if another user is admin, but for diagnosis it's useful
+    } else {
+      Logger.log(`DIAGNOSIS: Default 'admin' user found at sheet row ${adminRowIndex + 1}`);
+      Logger.log(`DIAGNOSIS: 'admin' user row data: ${JSON.stringify(adminRowData)}`);
+    }
+    
+    // Return comprehensive diagnosis
+    return {
+      sheetExists: true,
+      dimensions: { rows: numRows, columns: numCols },
+      headers: headers,
+      adminUser: { // Refers to the user with UserName 'admin'
+        found: adminRowIndex !== -1,
+        rowIndexInSheet: adminRowIndex !== -1 ? adminRowIndex + 1 : null,
+        rowData: adminRowData
+      }
+    };
+  } catch (error) {
+    Logger.log(`DIAGNOSIS ERROR: ${error.message}\nStack: ${error.stack}`);
+    return { error: error.message, stack: error.stack };
   }
 }
