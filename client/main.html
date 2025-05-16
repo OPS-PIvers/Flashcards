@@ -189,6 +189,47 @@
   }
 
   /**
+ * Global function to load a specific deck
+ * This ensures the function is accessible from any part of the application
+ * 
+ * @param {string} deckName - Name of the deck to load
+ */
+function globalLoadDeck(deckName) {
+  if (typeof loadDeck === 'function') {
+    loadDeck(deckName);
+  } else {
+    console.error('loadDeck function not defined yet. Check if flashcards.html is loaded.');
+    
+    // Fallback implementation
+    showLoadingIndicator();
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        hideLoadingIndicator();
+        if (result && result.success) {
+          window.app.currentDeck = deckName;
+          window.app.currentCards = result.cards || [];
+          window.app.currentCardIndex = 0;
+          
+          // Try to call displayFlashcard if it exists
+          if (typeof displayFlashcard === 'function') {
+            displayFlashcard(window.app.currentCards, 0);
+          } else {
+            handleError('Critical error: displayFlashcard function not found');
+          }
+        } else {
+          handleError(result ? result.message : `Failed to load deck "${deckName}"`);
+        }
+      })
+      .withFailureHandler(function(err) {
+        handleError(err.message || 'An error occurred while loading the deck.');
+        hideLoadingIndicator();
+      })
+      .getFlashcardsForDeck(deckName);
+  }
+}
+
+  /**
    * Load the deck list
    */
   function loadDeckList() {

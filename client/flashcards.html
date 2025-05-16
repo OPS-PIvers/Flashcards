@@ -204,12 +204,6 @@
     return true;
   }
   
-  /**
-   * Display a specific flashcard
-   * 
-   * @param {Array} cards - Array of cards
-   * @param {number} index - Index of the card to display
-   */
   function displayFlashcard(cards, index) {
     console.log('[displayFlashcard] Called with index:', index, 'Total cards in current list:', cards ? cards.length : 'N/A');
     
@@ -264,9 +258,6 @@
       }
     }
 
-    console.log('[displayFlashcard] Processing StudyConfig for card:', normalizedCard.id || 'unknown');
-    console.log('[displayFlashcard] Raw StudyConfig:', normalizedCard.StudyConfig);
-
     // Ensure boolean values
     studyConfig.showSideB = Boolean(studyConfig.showSideB);
     studyConfig.showSideC = Boolean(studyConfig.showSideC);
@@ -274,20 +265,6 @@
 
     console.log('[displayFlashcard] Final StudyConfig:', JSON.stringify(studyConfig));
 
-    // Better content detection logic
-    // Your existing content detection logic
-    let sideBneedsProcessing = studyConfig.showSideB && 
-                            normalizedCard.sideB && 
-                            typeof normalizedCard.sideB === 'string' &&
-                            (normalizedCard.sideB.includes('[AUDIO:') || normalizedCard.sideB.includes('[IMAGE:'));
-
-    let sideCneedsProcessing = studyConfig.showSideC && 
-                            normalizedCard.sideC && 
-                            typeof normalizedCard.sideC === 'string' &&
-                            (normalizedCard.sideC.includes('[AUDIO:') || normalizedCard.sideC.includes('[IMAGE:'));
-
-    console.log('[displayFlashcard] Content processing needed - SideB:', sideBneedsProcessing, 'SideC:', sideCneedsProcessing);
-    
     contentArea.innerHTML = `
       <div class="flashcard-container">
         <div class="deck-info">
@@ -331,8 +308,9 @@
       </div>
     `;
     
-    let sideBneedsProcessing = studyConfig.showSideB && normalizedCard.sideB && (normalizedCard.sideB.includes('[AUDIO:') || normalizedCard.sideB.includes('[IMAGE:'));
-    let sideCneedsProcessing = studyConfig.showSideC && normalizedCard.sideC && (normalizedCard.sideC.includes('[AUDIO:') || normalizedCard.sideC.includes('[IMAGE:'));
+    // IMPORTANT: Only declare these variables once!
+    const sideBneedsProcessing = studyConfig.showSideB && normalizedCard.sideB && (normalizedCard.sideB.includes('[AUDIO:') || normalizedCard.sideB.includes('[IMAGE:'));
+    const sideCneedsProcessing = studyConfig.showSideC && normalizedCard.sideC && (normalizedCard.sideC.includes('[AUDIO:') || normalizedCard.sideC.includes('[IMAGE:'));
     
     let sideBprocessed = !sideBneedsProcessing;
     let sideCprocessed = !sideCneedsProcessing;
