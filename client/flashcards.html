@@ -253,10 +253,8 @@
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            ${(studyConfig.showSideB && hasValidContent(normalizedCard.sideB)) ? 
-              `<div class="flashcard-content" id="flashcardSideBContent">${escapeHtml(normalizedCard.sideB || '')}</div>` : '<div class="flashcard-content" id="flashcardSideBContent"></div>'}
-            ${(studyConfig.showSideC && hasValidContent(normalizedCard.sideC)) ? 
-              `<div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(normalizedCard.sideC || '')}</div>` : '<div class="flashcard-secondary" id="flashcardSideCContent"></div>'}
+            <div class="flashcard-content" id="flashcardSideBContent">FORCE TEST: ${escapeHtml(normalizedCard.sideB || '')}</div>
+            <div class="flashcard-secondary" id="flashcardSideCContent">FORCE TEST: ${escapeHtml(normalizedCard.sideC || '')}</div>
           </div>
         </div>
         
