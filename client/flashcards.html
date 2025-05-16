@@ -208,15 +208,14 @@
   function displayFlashcard(cards, index) {
     console.log('[displayFlashcard] Called with index:', index, 'Total cards in current list:', cards ? cards.length : 'N/A');
     
-    if (!cards || index >= cards.length) { // Added !cards check
+    if (!cards || index >= cards.length) {
       console.log('[displayFlashcard] End of deck reached or invalid card array.');
-      // End of deck reached
       showDeckComplete();
       return;
     }
     
     const card = cards[index];
-    console.log('[displayFlashcard] Current card object:', JSON.parse(JSON.stringify(card))); // Deep copy for logging to avoid later modifications affecting log
+    console.log('[displayFlashcard] Current card object:', JSON.parse(JSON.stringify(card)));
     
     // Normalize card properties to handle both naming conventions
     const normalizedCard = {
@@ -239,11 +238,12 @@
     console.log('[displayFlashcard] Initial sideCContent for display:', sideCContent);
     
     // Parse study configuration
-    let studyConfig = { showSideB: true, showSideC: true }; // Default configuration
+    let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false }; // Default configuration
     if (card.StudyConfig) {
       try {
         const parsedConfig = JSON.parse(card.StudyConfig);
         studyConfig = { ...studyConfig, ...parsedConfig };
+        console.log('[displayFlashcard] Parsed study config:', studyConfig);
       } catch (e) {
         console.error('[displayFlashcard] Failed to parse study configuration:', e);
       }
@@ -295,13 +295,20 @@
     `;
     
     // Process dictionary content in both Side B and Side C if present
+    let pendingContentUpdates = 0;
+    let hasMediaContent = false;
+    
+    // Check if card has dictionary content
     if ((normalizedCard.FlashcardSideB && (normalizedCard.FlashcardSideB.includes('[AUDIO:') || normalizedCard.FlashcardSideB.includes('[IMAGE:'))) ||
         (normalizedCard.FlashcardSideC && (normalizedCard.FlashcardSideC.includes('[AUDIO:') || normalizedCard.FlashcardSideC.includes('[IMAGE:')))) {
       
+      hasMediaContent = true;
       console.log('[displayFlashcard] Dictionary content found in flashcard sides. Processing content.');
       
       // Process Side B content
-      if (studyConfig.showSideB && normalizedCard.FlashcardSideB && (normalizedCard.FlashcardSideB.includes('[AUDIO:') || normalizedCard.FlashcardSideB.includes('[IMAGE:'))) {
+      if (studyConfig.showSideB && normalizedCard.FlashcardSideB && 
+          (normalizedCard.FlashcardSideB.includes('[AUDIO:') || normalizedCard.FlashcardSideB.includes('[IMAGE:'))) {
+        pendingContentUpdates++;
         google.script.run
           .withSuccessHandler(function(processedContent) {
             console.log('[displayFlashcard] renderDictionaryContent success for Side B:', processedContent);
@@ -309,16 +316,47 @@
             const mainContentElement = document.querySelector('.flashcard-back .flashcard-content');
             if (mainContentElement) {
               mainContentElement.innerHTML = processedContent; // Processed content is already HTML
+              
+              // *** CRITICAL FIX: Set up audio buttons after content insertion ***
+              setupAudioButtons(mainContentElement);
+              
+              // Check if any autoplay is needed
+              if (studyConfig.autoplayAudio) {
+                const flashcardElement = document.getElementById('currentCard');
+                if (flashcardElement) {
+                  flashcardElement.addEventListener('click', function onFirstFlip() {
+                    // Wait for the flip animation to complete
+                    setTimeout(function() {
+                      const audioButtons = mainContentElement.querySelectorAll('.audio-play-btn');
+                      if (audioButtons && audioButtons.length > 0) {
+                        // Trigger the first audio button
+                        audioButtons[0].click();
+                      }
+                    }, 600); // Matches the 0.6s flip animation duration
+                    
+                    // Remove this listener after first execution
+                    this.removeEventListener('click', onFirstFlip);
+                  });
+                }
+              }
+            }
+            
+            pendingContentUpdates--;
+            if (pendingContentUpdates === 0) {
+              console.log('[displayFlashcard] All dictionary content processed');
             }
           })
           .withFailureHandler(function(err){
             console.error("[displayFlashcard] Failed to render Side B dictionary content:", err);
+            pendingContentUpdates--;
           })
           .renderDictionaryContent(normalizedCard.FlashcardSideB);
       }
       
       // Process Side C content
-      if (studyConfig.showSideC && normalizedCard.FlashcardSideC && (normalizedCard.FlashcardSideC.includes('[AUDIO:') || normalizedCard.FlashcardSideC.includes('[IMAGE:'))) {
+      if (studyConfig.showSideC && normalizedCard.FlashcardSideC && 
+          (normalizedCard.FlashcardSideC.includes('[AUDIO:') || normalizedCard.FlashcardSideC.includes('[IMAGE:'))) {
+        pendingContentUpdates++;
         google.script.run
           .withSuccessHandler(function(processedContent) {
             console.log('[displayFlashcard] renderDictionaryContent success for Side C:', processedContent);
@@ -326,29 +364,38 @@
             const secondaryContentElement = document.getElementById('flashcardSideCContent');
             if (secondaryContentElement) {
               secondaryContentElement.innerHTML = processedContent; // Processed content is already HTML
+              
+              // *** CRITICAL FIX: Set up audio buttons after content insertion ***
+              setupAudioButtons(secondaryContentElement);
+            }
+            
+            pendingContentUpdates--;
+            if (pendingContentUpdates === 0) {
+              console.log('[displayFlashcard] All dictionary content processed');
             }
           })
           .withFailureHandler(function(err){
             console.error("[displayFlashcard] Failed to render Side C dictionary content:", err);
+            pendingContentUpdates--;
           })
           .renderDictionaryContent(normalizedCard.FlashcardSideC);
       }
     }
     
     // Add event listeners
-    const flashcardElement = document.getElementById('currentCard'); // Renamed to avoid conflict
+    const flashcardElement = document.getElementById('currentCard');
     if (flashcardElement) {
       flashcardElement.addEventListener('click', function() {
         this.classList.toggle('flipped');
         
         // Show rating buttons when card is flipped to back
         const ratingButtons = document.getElementById('ratingButtons');
-        if (ratingButtons) { // Check if element exists
-            if (this.classList.contains('flipped')) {
-                ratingButtons.style.display = 'flex';
-            } else {
-                ratingButtons.style.display = 'none';
-            }
+        if (ratingButtons) {
+          if (this.classList.contains('flipped')) {
+            ratingButtons.style.display = 'flex';
+          } else {
+            ratingButtons.style.display = 'none';
+          }
         }
       });
     }
@@ -358,14 +405,14 @@
       btn.addEventListener('click', function(e) {
         e.stopPropagation(); // Prevent card from flipping back
         const rating = parseInt(this.getAttribute('data-rating'));
-        rateCard(card.id, rating, cards, index); // Ensure card.id is correct here
+        rateCard(card.id, rating, cards, index);
       });
     });
     
     // Back button
     const backToDeckListButton = document.getElementById('backToDeckList');
-    if (backToDeckListButton) { // Check if element exists
-        backToDeckListButton.addEventListener('click', loadDeckList);
+    if (backToDeckListButton) {
+      backToDeckListButton.addEventListener('click', loadDeckList);
     }
   }
   
