@@ -79,46 +79,105 @@
    * @param {Element} container - Container element with audio buttons
    */
   function setupAudioButtons(container) {
+    console.log('[setupAudioButtons] Attempting to set up for container:', container);
+    if (!container || typeof container.querySelectorAll !== 'function') {
+      console.error('[setupAudioButtons] Invalid container provided:', container);
+      return;
+    }
+
     const audioButtons = container.querySelectorAll('.audio-play-btn');
-    
-    audioButtons.forEach(button => {
-      const audio = button.querySelector('audio');
-      if (!audio) return;
+    console.log(`[setupAudioButtons] Found ${audioButtons.length} '.audio-play-btn' elements in container:`, container.id || container.className || container.tagName);
+
+    audioButtons.forEach((button, idx) => {
+      const originalButtonId = button.id || `button-${idx}`; // For logging
+      console.log(`[setupAudioButtons] Processing button #${idx + 1} (ID/Index: ${originalButtonId})`, button);
       
-      // Toggle play/pause icon
+      const audio = button.querySelector('audio');
+      
+      if (!audio) {
+        console.error(`[setupAudioButtons] No <audio> element found as child of button (ID/Index: ${originalButtonId}):`, button);
+        return; // Skip this button
+      }
+      console.log(`[setupAudioButtons] Found <audio> element for button (ID/Index: ${originalButtonId}):`, audio, 'with src:', audio.src);
+
+      // Check if an event listener is already attached (simple check, might not be foolproof)
+      if (button.dataset.listenerAttached === 'true') {
+        console.warn(`[setupAudioButtons] Listener already attached to button (ID/Index: ${originalButtonId}). Skipping re-attachment.`);
+        return;
+      }
+      button.dataset.listenerAttached = 'true'; // Mark as attached
+
       button.addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        // Stop all other playing audio
-        document.querySelectorAll('.audio-play-btn.playing').forEach(btn => {
-          if (btn !== this) {
-            const otherAudio = btn.querySelector('audio');
-            if (otherAudio) {
-              otherAudio.pause();
-              otherAudio.currentTime = 0;
+        e.stopPropagation(); // Prevent card from flipping
+
+        console.log(`[AudioButton ${originalButtonId}] Click detected. Audio src:`, audio.src);
+        // alert(`[Debug] Audio button ${originalButtonId} clicked! Attempting to play: ${audio.src.slice(0, 100)}...`);
+
+        // Stop all other playing audio on the page
+        document.querySelectorAll('audio').forEach(otherAudioEl => {
+          if (otherAudioEl !== audio && !otherAudioEl.paused) {
+            console.log(`[AudioButton ${originalButtonId}] Pausing other audio:`, otherAudioEl.src.slice(0,50));
+            otherAudioEl.pause();
+            otherAudioEl.currentTime = 0;
+            const otherButton = otherAudioEl.closest('.audio-play-btn');
+            if (otherButton) {
+              otherButton.classList.remove('playing');
+              const iconEl = otherButton.querySelector('.material-icons');
+              if (iconEl) iconEl.textContent = 'play_arrow';
             }
-            btn.classList.remove('playing');
-            btn.querySelector('.material-icons').textContent = 'play_arrow';
           }
         });
         
         if (audio.paused) {
-          audio.play();
-          this.classList.add('playing');
-          this.querySelector('.material-icons').textContent = 'pause';
+          console.log(`[AudioButton ${originalButtonId}] Audio is paused. Attempting to play.`);
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(_ => {
+              console.log(`[AudioButton ${originalButtonId}] Playback started successfully.`);
+              button.classList.add('playing');
+              const iconEl = button.querySelector('.material-icons');
+              if (iconEl) iconEl.textContent = 'pause';
+            }).catch(error => {
+              console.error(`[AudioButton ${originalButtonId}] Playback failed:`, error);
+              // alert(`[Debug ${originalButtonId}] Playback error: ${error.message}`);
+              // Optionally reset icon if play fails
+              button.classList.remove('playing');
+              const iconEl = button.querySelector('.material-icons');
+              if (iconEl) iconEl.textContent = 'play_arrow';
+            });
+          } else {
+            // This case should ideally not happen with modern browsers
+            console.warn(`[AudioButton ${originalButtonId}] audio.play() did not return a promise. Direct state change assumed.`);
+            // Manually update UI if needed, though this path is less common
+          }
         } else {
+          console.log(`[AudioButton ${originalButtonId}] Audio is playing. Attempting to pause.`);
           audio.pause();
-          audio.currentTime = 0;
-          this.classList.remove('playing');
-          this.querySelector('.material-icons').textContent = 'play_arrow';
+          audio.currentTime = 0; // Reset to beginning
+          button.classList.remove('playing');
+          const iconEl = button.querySelector('.material-icons');
+          if (iconEl) iconEl.textContent = 'play_arrow';
         }
       });
       
       // Reset button when audio ends
       audio.addEventListener('ended', function() {
+        console.log(`[AudioButton ${originalButtonId}] Audio ended.`);
         button.classList.remove('playing');
-        button.querySelector('.material-icons').textContent = 'play_arrow';
+        const iconEl = button.querySelector('.material-icons');
+        if (iconEl) iconEl.textContent = 'play_arrow';
       });
+
+      // Error handling for the audio element itself
+      audio.addEventListener('error', function(e) {
+        console.error(`[AudioButton ${originalButtonId}] Error on audio element:`, e);
+        // alert(`[Debug ${originalButtonId}] Audio element error. Check console.`);
+        button.classList.remove('playing');
+        const iconEl = button.querySelector('.material-icons');
+        if (iconEl) iconEl.textContent = 'error_outline'; // Indicate error
+      });
+
+      console.log(`[setupAudioButtons] Event listeners attached to button (ID/Index: ${originalButtonId}).`);
     });
   }
   
