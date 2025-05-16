@@ -491,3 +491,63 @@ function debugAdminStatus(username) {
     return { error: error.message, stack: error.stack };
   }
 }
+
+/**
+ * Diagnostic function to examine the Config sheet structure
+ * Call this from the server console to debug configuration issues
+ */
+function diagnoseConfigSheet() {
+  try {
+    const ss = getDatabaseSpreadsheet();
+    const configSheet = ss.getSheetByName('Config');
+    
+    if (!configSheet) {
+      Logger.log("DIAGNOSIS: Config sheet not found");
+      return { error: "Config sheet not found" };
+    }
+    
+    const numRows = configSheet.getLastRow();
+    const numCols = configSheet.getLastColumn();
+    Logger.log(`DIAGNOSIS: Config sheet dimensions: ${numRows} rows × ${numCols} columns`);
+    
+    // Get headers
+    const headers = configSheet.getRange(1, 1, 1, numCols).getValues()[0];
+    Logger.log(`DIAGNOSIS: Config sheet headers: ${JSON.stringify(headers)}`);
+    
+    // Check for admin user row
+    const allData = configSheet.getDataRange().getValues();
+    let adminRowIndex = -1;
+    let adminRowData = null;
+    
+    for (let i = 1; i < allData.length; i++) {
+      if (String(allData[i][2]).toLowerCase() === 'admin') {  // Assuming UserName is in column 3 (index 2)
+        adminRowIndex = i;
+        adminRowData = allData[i];
+        break;
+      }
+    }
+    
+    if (adminRowIndex === -1) {
+      Logger.log("DIAGNOSIS: Admin user not found in Config sheet");
+      return { error: "Admin user not found" };
+    }
+    
+    Logger.log(`DIAGNOSIS: Admin user found at row ${adminRowIndex + 1}`);
+    Logger.log(`DIAGNOSIS: Admin row data: ${JSON.stringify(adminRowData)}`);
+    
+    // Return comprehensive diagnosis
+    return {
+      sheetExists: true,
+      dimensions: { rows: numRows, columns: numCols },
+      headers: headers,
+      adminUser: {
+        found: true,
+        rowIndex: adminRowIndex + 1,
+        rowData: adminRowData
+      }
+    };
+  } catch (error) {
+    Logger.log(`DIAGNOSIS ERROR: ${error.message}\nStack: ${error.stack}`);
+    return { error: error.message, stack: error.stack };
+  }
+}

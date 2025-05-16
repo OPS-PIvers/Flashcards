@@ -10,8 +10,7 @@
  * @param {string} password - The password
  * @return {Object} Authentication result
  */
-// In server/Authentication.js - Update the authenticateUser function
-
+// Update the authenticateUser function
 function authenticateUser(username, password) {
   try {
     // Check if the app is initialized
@@ -41,22 +40,22 @@ function authenticateUser(username, password) {
     // Update last login time
     updateUserLastLogin(username);
 
-    // CRITICAL FIX: Directly check admin status from the sheet instead of relying on user object
-    const isAdminFromSheet = isUserAdminInSheet(username);
-    Logger.log(`authenticateUser: Direct admin check from sheet for ${username}: ${isAdminFromSheet}`);
+    // Get admin status using our improved function
+    const isAdminStatus = getIsUserAdmin(username);
+    Logger.log(`authenticateUser: Admin status for ${username} from getIsUserAdmin: ${isAdminStatus}`);
 
-    // Use the direct result from the sheet
+    // Create session with the correct admin status
     const sessionData = {
       userName: user.UserName,
       firstName: user.StudentFirst,
       lastName: user.StudentLast,
-      isAdmin: isAdminFromSheet, // Use direct check result
+      isAdmin: isAdminStatus,
       lastLogin: new Date().toISOString(),
       isValid: true
     };
 
     setUserSession(sessionData);
-    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdminFromSheet}. Session data set: ${JSON.stringify(sessionData)}`);
+    Logger.log(`User logged in successfully: ${username}, Admin: ${isAdminStatus}. Session data set: ${JSON.stringify(sessionData)}`);
 
     return {
       success: true,
@@ -65,7 +64,7 @@ function authenticateUser(username, password) {
         userName: user.UserName,
         firstName: user.StudentFirst,
         lastName: user.StudentLast,
-        isAdmin: isAdminFromSheet // Use direct check result
+        isAdmin: isAdminStatus
       }
     };
   } catch (error) {
