@@ -289,30 +289,34 @@
     background-color: var(--background-color);
     color: var(--text-color);
     transform: rotateY(180deg);
-    /* overflow-y: auto; /* Let flexbox handle overflow if necessary, or remove if image fits */
-    display: flex; 
+    display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Adjust if only one primary content block */
-    padding: var(--spacing-sm); /* Reduced padding */
+    /* justify-content: space-between; /* We'll let flex-grow handle distribution */
+    padding: var(--spacing-sm); /* Keep padding minimal */
+    height: 100%; /* Crucial: make flashcard-back fill the .flashcard height */
+    box-sizing: border-box;
   }
 
-  .flashcard-back .flashcard-content,
-  .flashcard-back .flashcard-secondary {
+  .flashcard-back .flashcard-content { /* This holds the image/text for Side B */
+    flex-grow: 1; /* Allow this to take most of the space */
+    display: flex; /* To manage its children, e.g., .flashcard-image */
+    align-items: center; /* Vertically center content like text or the image container */
+    justify-content: center; /* Horizontally center content */
+    min-height: 0; /* ESSENTIAL for flex children to shrink and not overflow parent */
+    overflow: hidden; /* Prevent children from visually spilling out */
     width: 100%;
-    box-sizing: border-box; /* Ensure padding doesn't cause overflow */
+    box-sizing: border-box;
+    /* border: 1px dashed red; /* For debugging */
   }
 
-  .flashcard-back .flashcard-content {
-    flex-grow: 1; 
-    display: flex; 
-    align-items: center;
-    justify-content: center;
-    min-height: 0; /* Important for flex children in some browsers */
-  }
-
-  .flashcard-back .flashcard-secondary {
-    flex-shrink: 0; /* Prevent secondary content from shrinking too much */
-    /* Add specific styling if secondary content has fixed height or similar */
+  .flashcard-back .flashcard-secondary { /* For Side C content */
+    flex-shrink: 0; /* Prevent it from shrinking if Side B content is large */
+    padding-top: var(--spacing-xs);
+    overflow-y: auto; /* Allow scrolling only for this part if it's long */
+    max-height: 30%; /* Example: Limit height of Side C to 30% of flashcard-back */
+    width: 100%;
+    box-sizing: border-box;
+    /* border: 1px dashed blue; /* For debugging */
   }
 
   .flashcard-content {
@@ -338,6 +342,14 @@
     bottom: var(--spacing-md);
     font-size: 0.75rem;
     color: var(--text-secondary);
+  }
+  .flashcard-helper a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+  /* Hide source text specifically within the flashcard display */
+  .flashcard-container .flashcard-back .source-text {
+    display: none !important;
   }
 
   /* Rating buttons */

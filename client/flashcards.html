@@ -87,7 +87,7 @@
       
       // Toggle play/pause icon
       button.addEventListener('click', function(e) {
-        e.stopPropagation(); // Prevent card from flipping
+        e.stopPropagation();
         
         // Stop all other playing audio
         document.querySelectorAll('.audio-play-btn.playing').forEach(btn => {
