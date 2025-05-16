@@ -1,262 +1,245 @@
 /**
  * Dictionary Integration Module for Flashcard App
- * Fetches audio pronunciations and images from Merriam-Webster dictionary
- *
- * !!! IMPORTANT WARNING !!!
- * This module relies on web scraping the Merriam-Webster dictionary website.
- * The structure of external websites can change at any time without notice.
- * If Merriam-Webster updates their website's HTML, the functions
- * `fetchDictionaryContent`, `extractAudioUrl`, and `extractImageUrl`
- * are HIGHLY LIKELY TO BREAK.
- *
- * For a more robust solution, consider using an official API if available.
- * This implementation is provided as a demonstration and may require
- * frequent maintenance if the source website changes.
- * !!! END WARNING !!!
+ * Fetches audio pronunciations from Voice RSS API and images from Pixabay API.
  */
 
-const DICTIONARY_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const MULTIMEDIA_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
- * Fetches dictionary content (audio URL and image URL) for a given word
- *
- * @param {string} word - The word to look up
- * @return {Object} Object containing audio and image URLs
+ * Retrieves the Voice RSS API key from Script Properties.
+ * @return {string|null} The API key or null if not found.
+ * @private
  */
-function fetchDictionaryContent(word) {
-  try {
-    // Normalize the word (lowercase, trim, replace spaces with hyphens)
-    const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-');
-
-    // Construct the dictionary URL
-    const dictionaryUrl = `https://www.merriam-webster.com/dictionary/${normalizedWord}`;
-
-    // Fetch the dictionary page
-    const response = UrlFetchApp.fetch(dictionaryUrl, {
-      muteHttpExceptions: true,
-      followRedirects: true,
-    });
-
-    // Check if request was successful
-    if (response.getResponseCode() !== 200) {
-      return {
-        success: false,
-        message: `Failed to fetch dictionary entry for "${word}". Response code: ${response.getResponseCode()}`,
-      };
-    }
-
-    // Get the page content
-    const content = response.getContentText();
-
-    // Extract audio URL
-    const audioUrl = extractAudioUrl(content, normalizedWord);
-
-    // Extract image URL
-    const imageUrl = extractImageUrl(content, normalizedWord);
-
-    Logger.log(`Dictionary content fetched for "${word}". Audio: ${audioUrl ? 'Found' : 'Not found'}, Image: ${imageUrl ? 'Found' : 'Not found'}`);
-
-    return {
-      success: true,
-      word: word,
-      audioUrl: audioUrl,
-      imageUrl: imageUrl,
-      sourceUrl: dictionaryUrl,
-    };
-  } catch (error) {
-    Logger.log(`Error fetching dictionary content for "${word}": ${error.message}`);
-    return {
-      success: false,
-      message: `Error fetching dictionary content: ${error.message}`,
-    };
-  }
+function getVoiceRssApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty('VOICERSS_API_KEY');
 }
 
 /**
- * Extracts the audio URL from the dictionary page content
- *
- * @param {string} content - The HTML content of the dictionary page
- * @param {string} word - The normalized word
- * @return {string|null} The audio URL or null if not found
+ * Retrieves the Pixabay API key from Script Properties.
+ * @return {string|null} The API key or null if not found.
+ * @private
  */
-function extractAudioUrl(content, word) {
-  try {
-    const firstLetter = word.charAt(0);
-    // Updated regex to be more flexible with audio file naming patterns
-    // This pattern looks for data-hw (headword), data-lang, data-dir, and data-file attributes
-    // common in Merriam-Webster audio player elements.
-    const audioPlayerPattern = /<a[^>]*?class="hw_pron_sound.*?data-file="([^"]+)".*?data-dir="([^"]+)".*?<\/a>/is;
-    let match = content.match(audioPlayerPattern);
-
-    if (match && match[1] && match[2]) {
-        const audioFile = match[1];
-        const audioDir = match[2];
-        // Construct the URL. Subdirectory might be part of dir (e.g. "gg") or just first letter.
-        // URL format: https://media.merriam-webster.com/audio/prons/en/us/mp3/{dir}/{file}.mp3
-        // Sometimes the dir in data-dir is just the first letter, sometimes it's a subfolder like "bix", "gg", etc.
-        // The audio file itself often starts with the word.
-        // Example: https://media.merriam-webster.com/audio/prons/en/us/mp3/d/dog00001.mp3
-        return `https://media.merriam-webster.com/audio/prons/en/us/mp3/${audioDir}/${audioFile}.mp3`;
-    }
-
-    // Fallback: Original pattern if the above fails.
-    // This is less reliable as MW has updated their audio delivery.
-    const legacyAudioPattern = new RegExp(`\\?pronunciation&lang=en_us&dir=${firstLetter}&file=(${word}\\d+|${word.substring(0,5)}[a-zA-Z0-9]{3})`, 'i');
-    match = content.match(legacyAudioPattern);
-
-    if (match && match[1]) {
-      return `https://www.merriam-webster.com/dictionary/${word}?pronunciation&lang=en_us&dir=${firstLetter}&file=${match[1]}`;
-    }
-    
-    // Try to find a direct mp3 link if possible (less common now)
-    const directMp3Pattern = new RegExp(`(https?://media.merriam-webster.com/audio/prons/en/us/mp3/${firstLetter}/[${word.substring(0,2)}].*?\\.mp3)`, 'i');
-    match = content.match(directMp3Pattern);
-    if (match && match[1]) {
-        return match[1];
-    }
-
-    return null;
-  } catch (error) {
-    Logger.log(`Error extracting audio URL for "${word}": ${error.message}`);
-    return null;
-  }
+function getPixabayApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty('PIXABAY_API_KEY');
 }
 
 /**
- * Extracts the image URL from the dictionary page content
+ * Fetches audio from Voice RSS API for a given word.
  *
- * @param {string} content - The HTML content of the dictionary page
- * @param {string} word - The normalized word (unused in current patterns but kept for context)
- * @return {string|null} The image URL or null if not found
+ * @param {string} word - The word to get audio for.
+ * @return {Object} { success: boolean, audioUrl?: string, message?: string }
+ *                  audioUrl is a Base64 data URI if successful.
+ * @private
  */
-function extractImageUrl(content, word) {
-  try {
-    // Pattern to match the image URL in the HTML (often in art-wrapper or similar divs)
-    // Looking for <img src="URL_TO_IMAGE" class="art- અહીં" ...>
-    // Or <img data-src="URL_TO_IMAGE" ...>
-    // Illustrations are less consistently available than audio.
-    const imagePattern = /<img\s+(?:alt="Illustration of[^"]*"\s+)?(?:class="[^"]*art[^"]*"\s+)?(?:data-src|src)="([^"]+)"[^>]*>/i;
-    const match = content.match(imagePattern);
+function fetchAudioFromVoiceRss_(word) {
+  const apiKey = getVoiceRssApiKey_();
+  if (!apiKey) {
+    Logger.log('Voice RSS API key not found in Script Properties.');
+    return { success: false, message: 'Audio service (VoiceRSS) not configured.' };
+  }
 
-    if (match && match[1]) {
-      // Ensure it's a full URL
-      if (match[1].startsWith('http')) {
-        return match[1];
-      } else if (match[1].startsWith('/')) {
-        return `https://www.merriam-webster.com${match[1]}`; // Prepend domain if relative
+  try {
+    const apiUrl = `http://api.voicerss.org/?key=${apiKey}&hl=en-us&src=${encodeURIComponent(word)}&c=MP3&f=44khz_16bit_stereo&b64=true`;
+    const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (responseCode === 200) {
+      if (responseText.startsWith('ERROR')) {
+        Logger.log(`Voice RSS API error for "${word}": ${responseText}`);
+        return { success: false, message: `Audio generation failed for "${word}": ${responseText}` };
       }
+      // responseText is already the Base64 data URI
+      Logger.log(`Voice RSS audio fetched successfully for "${word}".`);
+      return { success: true, audioUrl: responseText };
+    } else {
+      Logger.log(`Voice RSS API request failed for "${word}". Code: ${responseCode}, Response: ${responseText}`);
+      return { success: false, message: `Audio service request failed (Code: ${responseCode})` };
     }
-    
-    // A more specific pattern for images within certain figure tags or divs
-    const figureImagePattern = /<figure[^>]*>.*?<img\s+src="([^"]+)".*?<\/figure>/is;
-    const figureMatch = content.match(figureImagePattern);
-    if (figureMatch && figureMatch[1]) {
-         if (figureMatch[1].startsWith('http')) {
-            return figureMatch[1];
-        } else if (figureMatch[1].startsWith('/')) {
-            return `https://www.merriam-webster.com${figureMatch[1]}`;
-        }
-    }
-
-    return null;
   } catch (error) {
-    Logger.log(`Error extracting image URL for "${word}": ${error.message}`);
-    return null;
+    Logger.log(`Error fetching audio from Voice RSS for "${word}": ${error.message}`);
+    return { success: false, message: `Error fetching audio: ${error.message}` };
   }
 }
 
 /**
- * Fetches and caches dictionary content in user properties.
- * Cache expires after DICTIONARY_CACHE_DURATION_MS.
+ * Fetches an image from Pixabay API for a given word.
+ *
+ * @param {string} word - The word to search an image for.
+ * @return {Object} { success: boolean, imageUrl?: string, message?: string }
+ * @private
+ */
+function fetchImageFromPixabay_(word) {
+  const apiKey = getPixabayApiKey_();
+  if (!apiKey) {
+    Logger.log('Pixabay API key not found in Script Properties.');
+    return { success: false, message: 'Image service (Pixabay) not configured.' };
+  }
+
+  try {
+    const apiUrl = `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(word)}&image_type=photo&per_page=3&safesearch=true`;
+    const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (responseCode === 200) {
+      const data = JSON.parse(responseText);
+      if (data.hits && data.hits.length > 0) {
+        const imageUrl = data.hits[0].webformatURL; // Or .largeImageURL for higher res
+        Logger.log(`Pixabay image fetched successfully for "${word}": ${imageUrl}`);
+        return { success: true, imageUrl: imageUrl };
+      } else {
+        Logger.log(`No images found on Pixabay for "${word}".`);
+        return { success: false, message: `No image found for "${word}".` };
+      }
+    } else {
+      Logger.log(`Pixabay API request failed for "${word}". Code: ${responseCode}, Response: ${responseText}`);
+      return { success: false, message: `Image service request failed (Code: ${responseCode})` };
+    }
+  } catch (error) {
+    Logger.log(`Error fetching image from Pixabay for "${word}": ${error.message}`);
+    return { success: false, message: `Error fetching image: ${error.message}` };
+  }
+}
+
+/**
+ * Fetches multimedia content (audio URL and image URL) for a given word using APIs.
+ *
+ * @param {string} originalWord - The word to look up.
+ * @return {Object} Object containing audio and image URLs, and success status.
+ * @private
+ */
+function fetchMultimediaContentForWord_(originalWord) {
+  const normalizedWord = originalWord.toLowerCase().trim();
+
+  const audioResult = fetchAudioFromVoiceRss_(normalizedWord);
+  const imageResult = fetchImageFromPixabay_(normalizedWord);
+
+  let overallSuccess = audioResult.success || imageResult.success;
+  let messages = [];
+  if (!audioResult.success && audioResult.message) messages.push(`Audio: ${audioResult.message}`);
+  if (!imageResult.success && imageResult.message) messages.push(`Image: ${imageResult.message}`);
+  
+  const finalMessage = overallSuccess ? 
+                       (messages.length > 0 ? `Partial success. ${messages.join('; ')}` : "Content fetched successfully.") :
+                       (messages.length > 0 ? messages.join('; ') : "Failed to fetch any content.");
+
+  Logger.log(`Multimedia content fetched for "${originalWord}". Audio: ${audioResult.success}, Image: ${imageResult.success}`);
+  return {
+    success: overallSuccess,
+    word: originalWord,
+    audioUrl: audioResult.success ? audioResult.audioUrl : null,
+    imageUrl: imageResult.success ? imageResult.imageUrl : null,
+    message: finalMessage
+  };
+}
+
+/**
+ * Fetches and caches multimedia content (audio & image) in user properties.
+ * Cache expires after MULTIMEDIA_CACHE_DURATION_MS.
  *
  * @param {string} word - The word to look up
- * @return {Object} Dictionary content
+ * @return {Object} Multimedia content
  */
-function getCachedDictionaryContent(word) {
+function getCachedMultimediaContent(word) {
   const normalizedWord = word.toLowerCase().trim();
   const userProperties = PropertiesService.getUserProperties();
-  const cacheKey = `dict_v2_${normalizedWord}`; // v2 to invalidate old cache format
+  const cacheKey = `multimedia_v1_${normalizedWord}`;
 
   const cachedItem = userProperties.getProperty(cacheKey);
 
   if (cachedItem) {
     try {
       const parsedItem = JSON.parse(cachedItem);
-      if (parsedItem && parsedItem.timestamp && (Date.now() - parsedItem.timestamp < DICTIONARY_CACHE_DURATION_MS)) {
-        Logger.log(`Cache hit for dictionary word: "${normalizedWord}"`);
-        return parsedItem.data; // Return only the data part
+      if (parsedItem && parsedItem.timestamp && (Date.now() - parsedItem.timestamp < MULTIMEDIA_CACHE_DURATION_MS)) {
+        Logger.log(`Cache hit for multimedia: "${normalizedWord}"`);
+        return parsedItem.data;
       } else {
-        Logger.log(`Cache expired or invalid for dictionary word: "${normalizedWord}"`);
+        Logger.log(`Cache expired or invalid for multimedia: "${normalizedWord}"`);
       }
     } catch (e) {
-      Logger.log(`Error parsing cache for dictionary word: "${normalizedWord}". Error: ${e.message}`);
-      // Invalid cache, will fetch fresh data
+      Logger.log(`Error parsing cache for multimedia: "${normalizedWord}". Error: ${e.message}`);
     }
   } else {
-     Logger.log(`Cache miss for dictionary word: "${normalizedWord}"`);
+     Logger.log(`Cache miss for multimedia: "${normalizedWord}"`);
   }
 
-  // Fetch fresh content
-  const content = fetchDictionaryContent(normalizedWord); // fetchDictionaryContent expects non-normalized word for messages
+  const content = fetchMultimediaContentForWord_(word); // Use original word for messages
 
-  // Cache successful results
-  if (content.success) {
+  if (content.success) { // Cache even if only partial success
     try {
       const itemToCache = {
         data: content,
         timestamp: Date.now()
       };
       userProperties.setProperty(cacheKey, JSON.stringify(itemToCache));
-      Logger.log(`Cached fresh dictionary content for: "${normalizedWord}"`);
+      Logger.log(`Cached fresh multimedia content for: "${normalizedWord}"`);
     } catch (e) {
-      Logger.log(`Error stringifying content for cache for word "${normalizedWord}". Error: ${e.message} Content: ${JSON.stringify(content)}`);
-      // If stringify fails, don't break, just don't cache.
+      Logger.log(`Error stringifying multimedia content for cache for word "${normalizedWord}". Error: ${e.message}`);
     }
   }
-  
   return content;
 }
 
 
 /**
- * Test function to verify dictionary integration
+ * Checks a word and returns multimedia content for preview.
+ * Accessible by admin users.
  *
- * @param {string} word - The word to test
- * @return {Object} Test results
+ * @param {string} word - The word to look up
+ * @return {Object} Multimedia content for preview
  */
-function testDictionaryIntegration(word) {
-  return getCachedDictionaryContent(word);
+function previewDictionaryContent(word) { // Renamed to match client calls
+  try {
+    const session = getUserSession();
+    if (!session || !session.userName) {
+      return { success: false, message: 'You must be logged in to use these tools.' };
+    }
+    
+    const isAdmin = forceAdminCheck(session.userName); // From AdminTools.js
+    if (!isAdmin) {
+      return { success: false, message: 'Admin access required to use these tools.' };
+    }
+
+    if (!word || word.trim() === '') {
+      return { success: false, message: 'Word is required for lookup.' };
+    }
+
+    return getCachedMultimediaContent(word.trim());
+  } catch (error) {
+    Logger.log(`Error previewing multimedia content for "${word}": ${error.message}`);
+    return { success: false, message: `Server error previewing content: ${error.message}` };
+  }
 }
 
 /**
- * Adds dictionary content to a flashcard's Side C
+ * Adds dictionary content (audio/image tags) to a flashcard's Side C.
+ * Accessible by admin users.
  *
  * @param {string} deckName - Name of the deck
  * @param {string} cardId - ID of the flashcard
- * @param {string} word - The word to add content for
+ * @param {string} word - The word whose content was looked up
  * @return {Object} Result of the operation
  */
 function addDictionaryContentToCard(deckName, cardId, word) {
   try {
-    // CRITICAL FIX: Use direct admin check instead of isUserAdmin()
     const session = getUserSession();
     if (!session || !session.userName) {
       return { success: false, message: 'You must be logged in to modify cards.' };
     }
     
-    // Use the forceAdminCheck function from AdminTools.js
-    const isAdmin = forceAdminCheck(session.userName);
+    const isAdmin = forceAdminCheck(session.userName); // From AdminTools.js
     if (!isAdmin) {
       return { success: false, message: 'Admin access required to modify cards.' };
     }
 
-    const contentResult = getCachedDictionaryContent(word);
+    const contentResult = getCachedMultimediaContent(word);
 
-    if (!contentResult.success) {
-      return contentResult; // Return the error from dictionary lookup
+    if (!contentResult.success && !contentResult.audioUrl && !contentResult.imageUrl) { // Only return error if nothing was found
+      return { success: false, message: contentResult.message || `No multimedia content could be fetched for "${word}".` };
     }
 
-    const ss = getDatabaseSpreadsheet(); // Assumes getDatabaseSpreadsheet is defined
+    const ss = getDatabaseSpreadsheet();
     const deckSheet = ss.getSheetByName(deckName);
 
     if (!deckSheet) {
@@ -264,21 +247,21 @@ function addDictionaryContentToCard(deckName, cardId, word) {
     }
 
     const data = deckSheet.getDataRange().getValues();
-    const headers = data[0];
+    const headers = data[0].map(h => String(h).trim());
     const idIndex = headers.indexOf('FlashcardID');
+    const sideAIndex = headers.indexOf('FlashcardSideA'); // Needed for source tag
     const sideCIndex = headers.indexOf('FlashcardSideC');
 
-    if (idIndex === -1) {
-      return { success: false, message: 'FlashcardID column not found in deck.' };
-    }
-    if (sideCIndex === -1) {
-      return { success: false, message: 'FlashcardSideC column not found in deck. Cannot add dictionary content.' };
-    }
+    if (idIndex === -1) return { success: false, message: 'FlashcardID column not found in deck.' };
+    if (sideAIndex === -1) return { success: false, message: 'FlashcardSideA column not found (needed for source tag).' };
+    if (sideCIndex === -1) return { success: false, message: 'FlashcardSideC column not found. Cannot add content.' };
 
     let cardRowIndex = -1;
+    let cardSideAValue = '';
     for (let i = 1; i < data.length; i++) {
       if (data[i][idIndex] === cardId) {
-        cardRowIndex = i; // 0-based index for data array
+        cardRowIndex = i;
+        cardSideAValue = data[i][sideAIndex] || word; // Fallback to looked-up word if SideA is empty
         break;
       }
     }
@@ -287,63 +270,70 @@ function addDictionaryContentToCard(deckName, cardId, word) {
       return { success: false, message: `Card "${cardId}" not found in deck "${deckName}".` };
     }
 
-    let dictionaryTags = '';
+    let multimediaTags = '';
+    let sources = [];
     if (contentResult.audioUrl) {
-      dictionaryTags += `[AUDIO:${contentResult.audioUrl}] `;
+      multimediaTags += `[AUDIO:${contentResult.audioUrl}] `;
+      sources.push('VoiceRSS');
     }
     if (contentResult.imageUrl) {
-      dictionaryTags += `[IMAGE:${contentResult.imageUrl}] `;
+      multimediaTags += `[IMAGE:${contentResult.imageUrl}] `;
+      sources.push('Pixabay');
     }
     
-    if (dictionaryTags === '') {
+    if (multimediaTags === '') {
         return { success: false, message: `No audio or image found for "${word}" to add.` };
     }
     
-    dictionaryTags += `[Source: Merriam-Webster for "${contentResult.word}"]`;
+    const sourceString = sources.length > 0 ? `[Source: ${sources.join(', ')} for "${contentResult.word}"]` : '';
+    multimediaTags += sourceString;
 
-
-    // Get existing Side C content
     let existingSideC = data[cardRowIndex][sideCIndex] || '';
     
-    // Remove any previous dictionary tags for the same word to avoid duplicates
-    const oldTagsPattern = new RegExp(`\\[AUDIO:[^\\]]*?\\]\\s*\\[IMAGE:[^\\]]*?\\]\\s*\\[Source: Merriam-Webster for "${contentResult.word}"\\]|\\[AUDIO:[^\\]]*?\\]\\s*\\[Source: Merriam-Webster for "${contentResult.word}"\\]|\\[IMAGE:[^\\]]*?\\]\\s*\\[Source: Merriam-Webster for "${contentResult.word}"\\]`, 'gi');
-    existingSideC = existingSideC.replace(oldTagsPattern, '').trim();
+    // Remove any previous multimedia tags for the same word to avoid duplicates
+    const oldTagsPatternGeneric = new RegExp(
+        `\\[AUDIO:[^\\]]+?\\]\\s*(\\[IMAGE:[^\\]]+?\\]\\s*)?(\\[Source:[^\\]]+?for "${escapeRegex(contentResult.word)}"\\])?|` +
+        `(\\[AUDIO:[^\\]]+?\\]\\s*)?\\[IMAGE:[^\\]]+?\\]\\s*(\\[Source:[^\\]]+?for "${escapeRegex(contentResult.word)}"\\])?|` +
+        `(\\[AUDIO:[^\\]]+?\\]\\s*)?(\\[IMAGE:[^\\]]+?\\]\\s*)?\\[Source:[^\\]]+?for "${escapeRegex(contentResult.word)}"\\]`, 
+    'gi');
+    existingSideC = existingSideC.replace(oldTagsPatternGeneric, '').trim();
 
-    // Append new dictionary content
-    const newSideC = (existingSideC ? existingSideC + ' ' : '') + dictionaryTags.trim();
+    const newSideC = (existingSideC ? existingSideC + '\n' : '') + multimediaTags.trim();
 
-    deckSheet.getRange(cardRowIndex + 1, sideCIndex + 1).setValue(newSideC.trim()); // +1 for 1-based sheet row
+    deckSheet.getRange(cardRowIndex + 1, sideCIndex + 1).setValue(newSideC.trim());
 
+    Logger.log(`Multimedia content for "${word}" added to card "${cardId}" by admin "${session.userName}".`);
     return {
       success: true,
-      message: `Dictionary content for "${word}" added to card.`,
-      contentAdded: dictionaryTags,
+      message: `Multimedia content for "${word}" added to card.`,
+      contentAdded: multimediaTags,
     };
 
-  } catch (error) {
+  } catch (error)
+  {
     Logger.log(`Error in addDictionaryContentToCard: ${error.message} (Word: ${word}, Deck: ${deckName}, Card: ${cardId})`);
-    return { success: false, message: `Server error adding dictionary content: ${error.message}` };
+    return { success: false, message: `Server error adding multimedia content: ${error.message}` };
   }
 }
 
-
 /**
- * Renders dictionary content in flashcard view
+ * Renders multimedia content tags (AUDIO, IMAGE, Source) into HTML for flashcard display.
  *
- * @param {string} sideC - The sideC content containing dictionary markers
- * @return {string} Processed HTML content
+ * @param {string} sideCContent - The Side C content string containing the tags.
+ * @return {string} Processed HTML content.
  */
-function renderDictionaryContent(sideC) {
-  if (!sideC) return '';
+function renderDictionaryContent(sideCContent) { // Name kept for client compatibility
+  if (!sideCContent) return '';
 
-  let processedContent = escapeHtml(sideC); // Escape first to prevent XSS from non-dictionary content
+  let processedHtml = escapeHtmlServerSide(sideCContent);
 
-  // Process audio tags
+  // Process [AUDIO:...] tags
+  // Handles base64 data URIs
   const audioPattern = /\[AUDIO:([^\]]+)\]/g;
-  processedContent = processedContent.replace(audioPattern, (match, url) => {
-    const unescapedUrl = url.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"').replace(/'/g, "'");
+  processedHtml = processedHtml.replace(audioPattern, (match, url) => {
+    const unescapedUrl = unescapeHtmlServerSide(url); // Unescape the URL part
     return `
-      <div class="flashcard-audio">
+      <div class="flashcard-audio" style="margin: 10px 0;">
         <audio controls style="width:100%;">
           <source src="${unescapedUrl}" type="audio/mpeg">
           Your browser does not support audio.
@@ -352,33 +342,37 @@ function renderDictionaryContent(sideC) {
     `;
   });
 
-  // Process image tags
+  // Process [IMAGE:...] tags
   const imagePattern = /\[IMAGE:([^\]]+)\]/g;
-  processedContent = processedContent.replace(imagePattern, (match, url) => {
-    const unescapedUrl = url.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"').replace(/'/g, "'");
+  processedHtml = processedHtml.replace(imagePattern, (match, url) => {
+    const unescapedUrl = unescapeHtmlServerSide(url); // Unescape the URL part
     return `
-      <div class="flashcard-image">
-        <img src="${unescapedUrl}" alt="Dictionary illustration" style="max-width: 100%; max-height: 150px; height: auto; object-fit: contain;">
+      <div class="flashcard-image" style="margin: 10px 0; text-align: center;">
+        <img src="${unescapedUrl}" alt="Illustration" style="max-width: 100%; max-height: 200px; height: auto; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;">
       </div>
     `;
   });
   
-  // Process source tags to make them less prominent or style them
+  // Process [Source:...] tags
   const sourcePattern = /\[Source:([^\]]+)\]/g;
-  processedContent = processedContent.replace(sourcePattern, (match, sourceText) => {
-      return `<span style="font-size: 0.7em; color: #777; display: block; text-align: right;">Source: ${sourceText.replace(/&/g, '&')}</span>`;
+  processedHtml = processedHtml.replace(sourcePattern, (match, sourceText) => {
+      const unescapedSourceText = unescapeHtmlServerSide(sourceText);
+      return `<span style="font-size: 0.75em; color: #6c757d; display: block; text-align: right; margin-top: 5px;">Source: ${unescapedSourceText}</span>`;
   });
 
+  // Replace newlines with <br> for better display of multi-tag content
+  processedHtml = processedHtml.replace(/\n/g, '<br>');
 
-  return processedContent;
+  return processedHtml;
 }
 
-// Helper function, should be in a utility file or main.html if used client-side
-// For server-side rendering, this is fine here or in a server-side utility.
-function escapeHtml(str) {
-  if (typeof str !== 'string') {
-    return '';
-  }
+/**
+ * Server-side HTML escaping function.
+ * @param {string} str - The string to escape.
+ * @return {string} The escaped string.
+ */
+function escapeHtmlServerSide(str) {
+  if (typeof str !== 'string') return '';
   return str
     .replace(/&/g, '&')
     .replace(/</g, '<')
@@ -386,34 +380,26 @@ function escapeHtml(str) {
     .replace(/"/g, '"')
 }
 
+/**
+ * Server-side HTML unescaping function (basic).
+ * @param {string} str - The string to unescape.
+ * @return {string} The unescaped string.
+ */
+function unescapeHtmlServerSide(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
+    .replace(/'/g, "'");
+}
 
 /**
- * Checks a word in the dictionary and returns content for preview
- *
- * @param {string} word - The word to look up
- * @return {Object} Dictionary content for preview
+ * Escapes a string for use in a regular expression.
+ * @param {string} str - The string to escape.
+ * @return {string} The regex-escaped string.
  */
-function previewDictionaryContent(word) {
-  try {
-    // CRITICAL FIX: Use direct admin check instead of isUserAdmin()
-    const session = getUserSession();
-    if (!session || !session.userName) {
-      return { success: false, message: 'You must be logged in to use dictionary tools.' };
-    }
-    
-    // Use the forceAdminCheck function from AdminTools.js
-    const isAdmin = forceAdminCheck(session.userName);
-    if (!isAdmin) {
-      return { success: false, message: 'Admin access required to use dictionary tools.' };
-    }
-
-    if (!word || word.trim() === '') {
-      return { success: false, message: 'Word is required for dictionary lookup.' };
-    }
-
-    return getCachedDictionaryContent(word.trim());
-  } catch (error) {
-    Logger.log(`Error previewing dictionary content for "${word}": ${error.message}`);
-    return { success: false, message: `Server error previewing dictionary content: ${error.message}` };
-  }
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }

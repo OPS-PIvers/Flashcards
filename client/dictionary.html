@@ -1,46 +1,30 @@
 <script>
   /**
-   * Dictionary integration UI functionality
+   * Dictionary integration UI functionality (Admin Panel Tab)
    */
   
-  // Initialize dictionary lookup
   function initDictionaryLookup() {
-    // Add event listener to lookup button
     const lookupBtn = document.getElementById('lookupWordBtn');
-    if (lookupBtn) {
-      lookupBtn.addEventListener('click', lookupWord);
-    }
+    if (lookupBtn) lookupBtn.addEventListener('click', lookupWordInDictionaryTab);
     
-    // Add event listener to word input for Enter key
     const wordInput = document.getElementById('dictionaryWord');
-    if (wordInput) {
-      wordInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          lookupWord();
-        }
-      });
-    }
+    if (wordInput) wordInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') lookupWordInDictionaryTab(); });
     
-    // Populate deck dropdown
-    populateDeckDropdown();
+    populateDeckDropdownForDictionary();
     
-    // Add event listener to deck dropdown
     const deckDropdown = document.getElementById('targetDeck');
-    if (deckDropdown) {
-      deckDropdown.addEventListener('change', loadCardsForDeck);
-    }
+    if (deckDropdown) deckDropdown.addEventListener('change', loadCardsForDeckInDictionary);
     
-    // Add event listener to add to deck button
     const addToDeckBtn = document.getElementById('addToDeckBtn');
-    if (addToDeckBtn) {
-      addToDeckBtn.addEventListener('click', addContentToCard);
-    }
+    if (addToDeckBtn) addToDeckBtn.addEventListener('click', addMultimediaContentToSelectedCard);
+
+    // Clear previous results if any
+    const resultsArea = document.getElementById('dictionaryResults');
+    if (resultsArea) resultsArea.style.display = 'none';
+    window.currentDictionaryWordData = null; // Store full result for adding to card
   }
   
-  /**
-   * Look up a word in the dictionary
-   */
-  function lookupWord() {
+  function lookupWordInDictionaryTab() {
     const wordInput = document.getElementById('dictionaryWord');
     const word = wordInput.value.trim();
     
@@ -50,82 +34,72 @@
     }
     
     showLoadingIndicator();
-    
     google.script.run
-      .withSuccessHandler(displayDictionaryResults)
-      .withFailureHandler(handleError)
-      .previewDictionaryContent(word);
+      .withSuccessHandler(displayMultimediaResultsInDictionaryTab)
+      .withFailureHandler(function(err) {
+          hideLoadingIndicator();
+          handleError(err); // handleError is in main.html
+          const resultsArea = document.getElementById('dictionaryResults');
+          if(resultsArea) resultsArea.style.display = 'none'; // Hide results on error
+      })
+      .previewDictionaryContent(word); // Server-side function name is still previewDictionaryContent
   }
   
-  /**
-   * Display dictionary lookup results
-   * 
-   * @param {Object} result - Dictionary lookup result
-   */
-  function displayDictionaryResults(result) {
+  function displayMultimediaResultsInDictionaryTab(result) {
     hideLoadingIndicator();
+    window.currentDictionaryWordData = result; // Store the whole result object
     
-    if (!result.success) {
-      showError(result.message);
+    const resultsArea = document.getElementById('dictionaryResults');
+    if (!resultsArea) { console.error("Dictionary results area not found"); return; }
+
+    if (!result || (!result.success && !result.audioUrl && !result.imageUrl)) { // Show error if completely failed
+      showError(result.message || 'Failed to fetch content.');
+      resultsArea.style.display = 'none';
       return;
     }
     
-    // Show results area
-    const resultsArea = document.getElementById('dictionaryResults');
     resultsArea.style.display = 'block';
+    document.getElementById('resultWord').textContent = result.word || 'Word lookup';
     
-    // Set word
-    document.getElementById('resultWord').textContent = result.word;
-    
-    // Display pronunciation
     const pronunciationArea = document.getElementById('pronunciationResult');
     if (result.audioUrl) {
       pronunciationArea.innerHTML = `
-        <audio controls>
+        <audio controls style="width:100%;">
           <source src="${result.audioUrl}" type="audio/mpeg">
           Your browser does not support the audio element.
-        </audio>
-      `;
+        </audio>`;
     } else {
-      pronunciationArea.innerHTML = '<p>No pronunciation available</p>';
+      pronunciationArea.innerHTML = `<p>No pronunciation audio available. ${result.message.includes("Audio:") ? result.message.split("Audio:")[1].split(";")[0].trim() : ''}</p>`;
     }
     
-    // Display illustration
     const illustrationArea = document.getElementById('illustrationResult');
     if (result.imageUrl) {
       illustrationArea.innerHTML = `
-        <img src="${result.imageUrl}" alt="Illustration of ${result.word}" style="max-width: 100%; height: auto;">
-      `;
+        <img src="${result.imageUrl}" alt="Illustration of ${escapeHtml(result.word)}" style="max-width: 100%; height: auto; border-radius: 4px; border: 1px solid #eee;">`;
     } else {
-      illustrationArea.innerHTML = '<p>No illustration available</p>';
+      illustrationArea.innerHTML = `<p>No illustration available. ${result.message.includes("Image:") ? result.message.split("Image:")[1].split(";")[0].trim() : ''}</p>`;
     }
-    
-    // Store word data for later use
-    window.currentDictionaryWord = result.word;
+    if (result.message && result.message.toLowerCase().includes("partial success")) {
+        showSuccess(result.message); // Show partial success as a non-blocking notification
+    } else if (result.success) {
+        showSuccess("Content fetched successfully.");
+    }
   }
   
-  /**
-   * Populate the deck dropdown
-   */
-  function populateDeckDropdown() {
-    showLoadingIndicator();
-    
+  function populateDeckDropdownForDictionary() {
+    // showLoadingIndicator(); // Might be too much if other loaders are active
     google.script.run
       .withSuccessHandler(function(result) {
-        hideLoadingIndicator();
-        
+        // hideLoadingIndicator();
         if (!result.success) {
           showError(result.message);
           return;
         }
-        
         const deckDropdown = document.getElementById('targetDeck');
+        if (!deckDropdown) { console.error("Target deck dropdown not found"); return; }
         deckDropdown.innerHTML = '<option value="">Select a deck...</option>';
-        
-        // Filter out system sheets
         const systemSheets = ['Config', 'Classes'];
-        const userDecks = result.decks.filter(deck => !systemSheets.includes(deck));
-        
+        const userDecks = result.decks.filter(deckName => !systemSheets.includes(deckName));
         userDecks.forEach(deckName => {
           const option = document.createElement('option');
           option.value = deckName;
@@ -134,87 +108,87 @@
         });
       })
       .withFailureHandler(handleError)
-      .getAvailableDecks(false);
+      .getAvailableDecks(false); // Get all, including system, then filter
   }
   
-  /**
-   * Load cards for the selected deck
-   */
-  function loadCardsForDeck() {
+  function loadCardsForDeckInDictionary() {
     const deckDropdown = document.getElementById('targetDeck');
+    const cardSelectionArea = document.getElementById('cardSelectionArea');
+    const targetCardDropdown = document.getElementById('targetCard');
+
+    if (!deckDropdown || !cardSelectionArea || !targetCardDropdown) {
+        console.error("Dictionary tab's deck/card selection elements not found.");
+        return;
+    }
+
     const selectedDeck = deckDropdown.value;
-    
     if (!selectedDeck) {
-      document.getElementById('cardSelectionArea').style.display = 'none';
+      cardSelectionArea.style.display = 'none';
       return;
     }
     
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         hideLoadingIndicator();
-        
         if (!result.success) {
           showError(result.message);
+          cardSelectionArea.style.display = 'none';
           return;
         }
-        
-        const cardDropdown = document.getElementById('targetCard');
-        cardDropdown.innerHTML = '<option value="">Select a card...</option>';
-        
-        result.cards.forEach(card => {
-          const option = document.createElement('option');
-          option.value = card.id;
-          option.textContent = card.sideA;
-          cardDropdown.appendChild(option);
-        });
-        
-        document.getElementById('cardSelectionArea').style.display = 'block';
+        targetCardDropdown.innerHTML = '<option value="">Select a card...</option>';
+        if (result.cards && result.cards.length > 0) {
+            result.cards.forEach(card => {
+              const option = document.createElement('option');
+              option.value = card.id || card.FlashcardID; // Use 'id' if present, fallback to 'FlashcardID'
+              option.textContent = `${card.sideA || card.FlashcardSideA} (ID: ${option.value})`;
+              targetCardDropdown.appendChild(option);
+            });
+            cardSelectionArea.style.display = 'block';
+        } else {
+            targetCardDropdown.innerHTML = '<option value="">No cards in this deck</option>';
+            cardSelectionArea.style.display = 'block'; // Show area but with "no cards"
+        }
       })
-      .withFailureHandler(handleError)
-      .getFlashcardsForDeck(selectedDeck);
+      .withFailureHandler(function(err){
+          hideLoadingIndicator();
+          handleError(err);
+          cardSelectionArea.style.display = 'none';
+      })
+      .getFlashcardsForDeck(selectedDeck); // This returns cards with 'id', 'sideA' etc.
   }
   
-  /**
-   * Add dictionary content to the selected card
-   */
-  function addContentToCard() {
+  function addMultimediaContentToSelectedCard() {
     const deckDropdown = document.getElementById('targetDeck');
     const cardDropdown = document.getElementById('targetCard');
     
     const selectedDeck = deckDropdown.value;
-    const selectedCard = cardDropdown.value;
-    const word = window.currentDictionaryWord;
+    const selectedCardId = cardDropdown.value;
     
-    if (!selectedDeck) {
-      showError('Please select a deck');
+    if (!window.currentDictionaryWordData || !window.currentDictionaryWordData.word) {
+      showError('No multimedia content available to add. Please look up a word first.');
       return;
     }
-    
-    if (!selectedCard) {
-      showError('Please select a card');
-      return;
-    }
-    
-    if (!word) {
-      showError('No word data available');
-      return;
-    }
+    const wordData = window.currentDictionaryWordData;
+
+    if (!selectedDeck) { showError('Please select a deck'); return; }
+    if (!selectedCardId) { showError('Please select a card'); return; }
     
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         hideLoadingIndicator();
-        
         if (result.success) {
-          showSuccess('Dictionary content added to card');
+          showSuccess(result.message || 'Multimedia content added to card successfully.');
+          // Optionally, clear results or prompt for next action
+          document.getElementById('dictionaryResults').style.display = 'none';
+          document.getElementById('dictionaryWord').value = '';
+          window.currentDictionaryWordData = null;
         } else {
-          showError(result.message);
+          showError(result.message || 'Failed to add content to card.');
         }
       })
-      .withFailureHandler(handleError)
-      .addDictionaryContentToCard(selectedDeck, selectedCard, word);
+      .withFailureHandler(handleError) // handleError handles hideLoadingIndicator
+      .addDictionaryContentToCard(selectedDeck, selectedCardId, wordData.word); // Server uses the word to re-fetch/cache
   }
 </script>

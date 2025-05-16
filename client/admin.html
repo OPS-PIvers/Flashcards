@@ -53,21 +53,18 @@
         loadUserList();
 
         // Initialize dictionary lookup for Dictionary Tools tab
-        // This will only add listeners etc. if the dictionary tab is active
-        // and its content (from dictionaryLookupTemplate) is present.
-        // Ensure dictionaryLookupTemplate is included in adminPanelTemplate's dictionaryTab.
-        if (document.getElementById('dictionaryLookupTemplate')) { // Check if template exists
+        if (document.getElementById('dictionaryLookupTemplate')) { 
             const dictionaryTabContent = document.getElementById('dictionaryTab');
             const dictionaryTemplate = document.getElementById('dictionaryLookupTemplate');
             if (dictionaryTabContent && dictionaryTemplate && dictionaryTemplate.content) {
                  dictionaryTabContent.appendChild(dictionaryTemplate.content.cloneNode(true));
-                 initDictionaryLookup(); // Now safe to call
+                 initDictionaryLookup(); 
                  console.log('Dictionary lookup template initialized');
             } else {
-                console.warn('Dictionary template or tab content not found');
+                console.warn('Dictionary template or tab content not found for dictionary tools.');
             }
         } else {
-            console.warn('Dictionary lookup template not found');
+            console.warn('Dictionary lookup template not found in document.');
         }
         
         hideLoadingIndicator();
@@ -77,7 +74,6 @@
         console.error('Admin access check failed with error:', err);
         handleError(err);
         hideLoadingIndicator();
-        // Show current client state for debugging
         console.log('Current client app state during error:', window.app);
       })
       .getAdminAccess();
@@ -94,11 +90,9 @@
 
     tabs.forEach(tab => {
       tab.addEventListener('click', function() {
-        // Remove active class from all tabs and content
         tabs.forEach(t => t.classList.remove('active'));
         tabContents.forEach(content => content.classList.remove('active'));
 
-        // Add active class to clicked tab and corresponding content
         this.classList.add('active');
         const tabName = this.getAttribute('data-tab');
         console.log(`Tab clicked: ${tabName}`);
@@ -111,7 +105,6 @@
         }
       });
     });
-
     console.log('Admin tabs initialized');
   }
 
@@ -122,14 +115,13 @@
     showLoadingIndicator();
     console.log('Loading deck list for admin panel');
     
-    const decksTabContent = document.getElementById('decksTab'); // Target specific area
+    const decksTabContent = document.getElementById('decksTab'); 
     if (!decksTabContent) {
         showError("Deck management area not found in admin panel.");
         hideLoadingIndicator();
         console.error('decksTab element not found in DOM');
         return;
     }
-    // Initially show main deck list view within decksTab
     decksTabContent.innerHTML = `
         <div class="card">
             <div class="card-title">Create New Deck</div>
@@ -148,7 +140,6 @@
             </div>
         </div>
     `;
-    // Add event listener to create deck button *after* it's in the DOM
     const createDeckBtn = document.getElementById('createDeckBtn');
     if (createDeckBtn) {
       createDeckBtn.addEventListener('click', createNewDeck);
@@ -157,11 +148,9 @@
       console.warn('Create deck button not found after DOM update');
     }
 
-
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Admin deck list loaded:', result);
-        
         if (result && result.success) {
           displayAdminDeckList(result.decks);
         } else {
@@ -185,7 +174,7 @@
         console.error('Error in getAvailableDecks call:', errorMsg);
         hideLoadingIndicator();
       })
-      .getAvailableDecks(false); // Get all decks, including system ones if needed for some reason, or true for user decks
+      .getAvailableDecks(false); 
   }
 
   /**
@@ -193,23 +182,20 @@
    * @param {Array} decks - List of deck names
    */
   function displayAdminDeckList(decks) {
-    const deckListElement = document.getElementById('adminDeckListContainer'); // Target specific container
-
+    const deckListElement = document.getElementById('adminDeckListContainer'); 
     if (!deckListElement) {
       console.error('Admin deck list container not found.');
       return;
     }
-
     let html = '';
-    const systemSheets = ['Config', 'Classes']; // Define system sheets to filter out
+    const systemSheets = ['Config', 'Classes']; 
     const userDecks = Array.isArray(decks) ? decks.filter(deck => {
       const deckName = typeof deck === 'object' ? (deck.name || '') : deck;
       return !systemSheets.includes(deckName);
     }) : [];
 
     console.log(`Displaying ${userDecks.length} user decks in admin panel`);
-
-    userDecks.forEach(deckName => { // Assuming decks is an array of strings
+    userDecks.forEach(deckName => { 
       const normalizedDeckName = typeof deckName === 'object' ? (deckName.name || deckName.toString()) : deckName.toString();
       html += `
         <div class="admin-deck-item">
@@ -221,14 +207,11 @@
         </div>
       `;
     });
-
     if (userDecks.length === 0) {
       html = '<p>No user decks found. Create a new deck to get started.</p>';
     }
-
     deckListElement.innerHTML = html;
 
-    // Add event listeners to action buttons
     deckListElement.querySelectorAll('[data-action="edit"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const deckName = this.getAttribute('data-deck');
@@ -236,7 +219,6 @@
         showDeckEditor(deckName);
       });
     });
-
     deckListElement.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const deckName = this.getAttribute('data-deck');
@@ -257,23 +239,19 @@
         return;
     }
     const deckName = newDeckNameInput.value.trim();
-
     if (!deckName) {
       handleError('Deck name is required');
       return;
     }
-
     console.log(`Creating new deck: ${deckName}`);
     showLoadingIndicator();
-
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Create deck result:', result);
-        
         if (result && result.success) {
           showSuccess(result.message || 'Deck created successfully');
-          loadAdminDeckList(); // Reload the list to show the new deck
-          newDeckNameInput.value = ''; // Clear input
+          loadAdminDeckList(); 
+          newDeckNameInput.value = '';
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
@@ -300,14 +278,12 @@
     }
     console.log(`Deleting deck: ${deckName}`);
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Delete deck result:', result);
-        
         if (result && result.success) {
           showSuccess(result.message || 'Deck deleted successfully');
-          loadAdminDeckList(); // Reload to reflect deletion
+          loadAdminDeckList();
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
@@ -324,11 +300,7 @@
       .deleteDeck(deckName);
   }
 
-  // Store for cards being edited in a deck
-  window.adminDeckCache = {
-    cards: [],
-    deckName: null
-  };
+  window.adminDeckCache = { cards: [], deckName: null };
 
   /**
    * Show deck editor (loads cards for a deck)
@@ -337,14 +309,12 @@
   function showDeckEditor(deckName) {
     console.log(`Loading deck editor for: ${deckName}`);
     showLoadingIndicator();
-    window.adminDeckCache.deckName = deckName; // Store current deck name
-
+    window.adminDeckCache.deckName = deckName; 
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Get flashcards result:', result);
-        
         if (result && result.success) {
-          window.adminDeckCache.cards = result.cards || []; // Cache the cards
+          window.adminDeckCache.cards = result.cards || []; 
           console.log(`Loaded ${window.adminDeckCache.cards.length} cards for editing`);
           displayDeckEditorUI(deckName, window.adminDeckCache.cards);
         } else {
@@ -360,7 +330,7 @@
           console.error('Error in getFlashcardsForDeck call:', errorMsg);
           hideLoadingIndicator();
       })
-      .getFlashcardsForDeck(deckName); // This function needs to return card objects
+      .getFlashcardsForDeck(deckName);
   }
 
   /**
@@ -369,43 +339,37 @@
    * @param {Array<Object>} cards - Array of flashcard objects
    */
   function displayDeckEditorUI(deckName, cards) {
-    const decksTabContent = document.getElementById('decksTab'); // Target the main tab content area
+    const decksTabContent = document.getElementById('decksTab');
     if (!decksTabContent) {
         showError("Deck management area not found.");
         console.error('decksTab element not found for editor UI');
         return;
     }
-
     let cardListHtml = '';
     if (!Array.isArray(cards) || cards.length === 0) {
       cardListHtml = '<p>No cards in this deck. Add a new card to get started.</p>';
     } else {
       cards.forEach(card => {
-        // Ensure card properties are escaped for HTML safety
         const cardId = escapeHtml(card.id || card.FlashcardID || '');
         const sideA = escapeHtml(card.sideA || card.FlashcardSideA || '');
-        const sideB = escapeHtml(card.sideB || card.FlashcardSideB || '');
-        const sideC = escapeHtml(card.sideC || card.FlashcardSideC || '');
+        const sideB = escapeHtml(card.sideB || card.FlashcardSideB || ''); // Will be rendered by renderDictionaryContent
+        const sideC = escapeHtml(card.sideC || card.FlashcardSideC || ''); // Will be rendered by renderDictionaryContent
         let tags = '';
+        if (Array.isArray(card.tags)) tags = escapeHtml(card.tags.join(', '));
+        else if (typeof card.tags === 'string') tags = escapeHtml(card.tags);
+        else if (card.Tags) tags = Array.isArray(card.Tags) ? escapeHtml(card.Tags.join(', ')) : escapeHtml(String(card.Tags));
         
-        if (Array.isArray(card.tags)) {
-          tags = escapeHtml(card.tags.join(', '));
-        } else if (typeof card.tags === 'string') {
-          tags = escapeHtml(card.tags);
-        } else if (card.Tags) {
-          if (Array.isArray(card.Tags)) {
-            tags = escapeHtml(card.Tags.join(', '));
-          } else {
-            tags = escapeHtml(String(card.Tags));
-          }
-        }
+        // Side B and C will be processed by renderDictionaryContent if tags are present
+        // For admin view, we can show raw tags or a simplified version.
+        // Here, we'll just show the raw text for brevity in admin view.
+        // A more advanced view could render the tags similarly to the study view.
         
         cardListHtml += `
           <div class="admin-card-item" data-card-id="${cardId}">
             <div class="admin-card-content">
               <strong>Side A:</strong> ${sideA}<br>
-              <strong>Side B:</strong> ${sideB}<br>
-              ${sideC ? `<strong>Side C:</strong> ${sideC}<br>` : ''}
+              <strong>Side B (raw):</strong> ${sideB}<br>
+              ${sideC ? `<strong>Side C (raw):</strong> ${sideC}<br>` : ''}
               ${tags ? `<strong>Tags:</strong> ${tags}` : ''}
             </div>
             <div class="admin-card-actions">
@@ -425,27 +389,24 @@
           <button id="backToAdminDecks" class="btn btn-outline">Back to Decks</button>
           <button id="showAddCardFormBtn" class="btn">Add New Card</button>
         </div>
-        
         <div id="addCardFormContainer" style="display: none; margin-top: 20px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
           <h3>Add New Card</h3>
           <div class="form-group">
             <label for="newCardSideA" class="form-label">Side A (Question/Word)</label>
             <input type="text" id="newCardSideA" class="form-control" required>
           </div>
-          
           <div class="form-group">
-            <label for="newCardSideB" class="form-label">Side B (Answer)</label>
+            <label for="newCardSideB" class="form-label">Side B (Answer/Text)</label>
             <div class="input-with-button">
-              <input type="text" id="newCardSideB" class="form-control" required>
+              <input type="text" id="newCardSideB" class="form-control"> <!-- Allow empty if image is primary -->
               <button id="getImageBtn" class="btn btn-sm">Get Image</button>
             </div>
             <div id="imagePreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
               <img id="imagePreview" style="max-width: 100%; max-height: 150px; object-fit: contain;">
             </div>
           </div>
-          
           <div class="form-group">
-            <label for="newCardSideC" class="form-label">Side C (Additional Info)</label>
+            <label for="newCardSideC" class="form-label">Side C (Additional Info/Text)</label>
             <div class="input-with-button">
               <textarea id="newCardSideC" class="form-control" rows="3"></textarea>
               <button id="getAudioBtn" class="btn btn-sm">Get Audio</button>
@@ -454,238 +415,149 @@
               <audio id="audioPreview" controls style="width: 100%;"></audio>
             </div>
           </div>
-          
           <div class="form-group">
             <label for="newCardTags" class="form-label">Tags (comma-separated)</label>
             <input type="text" id="newCardTags" class="form-control">
           </div>
-          
           <div class="form-actions">
             <button id="submitNewCardBtn" class="btn btn-secondary">Save Card</button>
             <button id="cancelAddCardBtn" class="btn btn-outline">Cancel</button>
           </div>
         </div>
-        
         <div class="admin-card-list" id="cardListDisplay">${cardListHtml}</div>
       </div>
     `;
-
     console.log('Deck editor UI rendered, attaching event listeners');
     
-    // Add event listeners for this view
     document.getElementById('backToAdminDecks').addEventListener('click', loadAdminDeckList);
-    
     document.getElementById('showAddCardFormBtn').addEventListener('click', function() {
       document.getElementById('addCardFormContainer').style.display = 'block';
-      this.style.display = 'none'; // Hide the "Add New Card" button
+      this.style.display = 'none';
     });
-    
     document.getElementById('cancelAddCardBtn').addEventListener('click', function() {
       document.getElementById('addCardFormContainer').style.display = 'none';
       document.getElementById('newCardSideA').value = '';
       document.getElementById('newCardSideB').value = '';
       document.getElementById('newCardSideC').value = '';
       document.getElementById('newCardTags').value = '';
-      document.getElementById('showAddCardFormBtn').style.display = 'inline-block'; // Show "Add New Card"
+      document.getElementById('newCardSideB').removeAttribute('data-image-url');
+      document.getElementById('newCardSideC').removeAttribute('data-audio-url');
+      document.getElementById('imagePreviewContainer').style.display = 'none';
+      document.getElementById('audioPreviewContainer').style.display = 'none';
+      document.getElementById('showAddCardFormBtn').style.display = 'inline-block';
     });
-    
-    document.getElementById('submitNewCardBtn').addEventListener('click', function() {
-      addNewCardToDeck(deckName);
-    });
-    
+    document.getElementById('submitNewCardBtn').addEventListener('click', function() { addNewCardToDeck(deckName); });
     document.getElementById('getImageBtn').addEventListener('click', function() {
       const wordInput = document.getElementById('newCardSideA').value.trim();
-      if (!wordInput) {
-        showError('Please enter a word in Side A first');
-        return;
-      }
-      
-      fetchDictionaryImageForWord(wordInput);
+      if (!wordInput) { showError('Please enter a word in Side A first'); return; }
+      fetchMultimediaForItem(wordInput, 'image', 'newCardSideB', 'imagePreviewContainer', 'imagePreview');
     });
-
     document.getElementById('getAudioBtn').addEventListener('click', function() {
       const wordInput = document.getElementById('newCardSideA').value.trim();
-      if (!wordInput) {
-        showError('Please enter a word in Side A first');
-        return;
-      }
-      
-      fetchDictionaryAudioForWord(wordInput);
+      if (!wordInput) { showError('Please enter a word in Side A first'); return; }
+      fetchMultimediaForItem(wordInput, 'audio', 'newCardSideC', 'audioPreviewContainer', 'audioPreview');
     });
     
-    // Card action buttons
     document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="edit-card"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
         console.log(`Edit card button clicked for card ID: ${cardId}`);
         const cardToEdit = window.adminDeckCache.cards.find(c => (c.id === cardId) || (c.FlashcardID === cardId));
-        if (cardToEdit) {
-          showCardEditorForm(this.closest('.admin-card-item'), cardToEdit, deckName);
-        } else {
-          showError("Card data not found for editing.");
-          console.error(`Card with ID ${cardId} not found in cached cards:`, window.adminDeckCache.cards);
-        }
+        if (cardToEdit) showCardEditorForm(this.closest('.admin-card-item'), cardToEdit, deckName);
+        else { showError("Card data not found for editing."); console.error(`Card with ID ${cardId} not found`); }
       });
     });
-    
     document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="delete-card"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
-        console.log(`Delete card button clicked for card ID: ${cardId}`);
         deleteCardFromDeck(cardId, deckName);
       });
     });
-    
     document.querySelectorAll('#cardListDisplay .admin-card-item [data-action="add-dictionary"]').forEach(btn => {
       btn.addEventListener('click', function() {
         const cardId = this.getAttribute('data-card-id');
-        console.log(`Dictionary button clicked for card ID: ${cardId}`);
         const cardForDict = window.adminDeckCache.cards.find(c => (c.id === cardId) || (c.FlashcardID === cardId));
-        if (cardForDict) {
-            handleDictionaryForCard(cardForDict, deckName);
-        } else {
-            showError("Card data not found for dictionary action.");
-            console.error(`Card with ID ${cardId} not found in cached cards:`, window.adminDeckCache.cards);
-        }
+        if (cardForDict) handleDictionaryForCard(cardForDict, deckName);
+        else { showError("Card data not found for dictionary action."); console.error(`Card with ID ${cardId} not found`); }
       });
     });
   }
 
   /**
-   * Handle dictionary lookup for a specific card
+   * Handle dictionary lookup for a specific card, pre-filling dictionary tab.
    * @param {Object} card - The card object
    * @param {string} deckName - The name of the current deck
    */
   function handleDictionaryForCard(card, deckName) {
-    // Switch to dictionary tab
     const dictionaryTabButton = document.querySelector('.admin-tab[data-tab="dictionary"]');
     if (dictionaryTabButton) {
-        console.log('Switching to dictionary tab');
-        dictionaryTabButton.click(); // This will also make the tab content visible
+        console.log('Switching to dictionary tab for card:', card.id || card.FlashcardID);
+        dictionaryTabButton.click(); 
     } else {
-        showError("Dictionary tab not found.");
-        console.error('Dictionary tab button not found in DOM');
-        return;
+        showError("Dictionary tab not found."); return;
     }
 
-    // Pre-fill and trigger lookup
-    // Wait a moment for the tab content to be potentially rendered and visible
     setTimeout(() => {
         const dictionaryWordInput = document.getElementById('dictionaryWord');
         const lookupBtn = document.getElementById('lookupWordBtn');
         const targetDeckDropdown = document.getElementById('targetDeck');
 
         if (!dictionaryWordInput || !lookupBtn || !targetDeckDropdown) {
-            showError("Dictionary UI elements not found. Ensure the template is loaded.");
-            console.error('Dictionary UI elements not found after tab switch');
-            return;
+            showError("Dictionary UI elements not found. Ensure the template is loaded."); return;
         }
-
-        // Use Side A as the default lookup term. Allow user to change if needed.
-        // Taking the first significant word or a short phrase might be better than the whole Side A.
-        let wordToLookup = (card.sideA || card.FlashcardSideA || '').trim();
-        if (wordToLookup) {
-            // Simple strategy: take first few words, or up to a certain length
-            const words = wordToLookup.split(/\s+/);
-            wordToLookup = words.slice(0, 3).join(' '); // e.g., first 3 words
-             // Or, if it's a single long word, just use that.
-            if (words.length === 1 && words[0].length > 15) {
-                 wordToLookup = words[0];
-            }
-        }
-        
-        console.log(`Pre-filling dictionary with word: "${wordToLookup}" for card: ${card.id || card.FlashcardID}`);
+        let wordToLookup = (card.sideA || card.FlashcardSideA || '').trim().split(/\s+/).slice(0, 3).join(' ');
+        console.log(`Pre-filling dictionary with word: "${wordToLookup}" for card ID: ${card.id || card.FlashcardID}`);
         dictionaryWordInput.value = wordToLookup || '';
-
-        // Auto-select deck and card
-        // populateDeckDropdown is called by initDictionaryLookup, so it should be populated.
         targetDeckDropdown.value = deckName;
-        // Trigger change to load cards for this deck
         targetDeckDropdown.dispatchEvent(new Event('change')); 
 
-        // After cards are loaded (another async step), select the card
-        // This needs to be robust. `loadCardsForDeck` should ideally have a callback.
-        // For now, using a timeout as a temporary measure.
-        console.log('Setting up interval to check when cards are loaded');
         const intervalCheck = setInterval(function() {
             const targetCardDropdown = document.getElementById('targetCard');
-            if (targetCardDropdown && targetCardDropdown.options.length > 1) { // Wait for options
-                console.log(`Card dropdown populated with ${targetCardDropdown.options.length} options`);
-                
-                // Try setting the dropdown to the card ID
-                const cardId = card.id || card.FlashcardID;
-                targetCardDropdown.value = cardId;
-                
-                if (targetCardDropdown.value === cardId) { // Check if selection was successful
-                    console.log(`Successfully selected card ${cardId} in dropdown`);
+            if (targetCardDropdown && targetCardDropdown.options.length > 1) { 
+                const cardIdToSelect = card.id || card.FlashcardID;
+                targetCardDropdown.value = cardIdToSelect;
+                if (targetCardDropdown.value === cardIdToSelect) {
+                    console.log(`Successfully selected card ${cardIdToSelect} in dictionary dropdown`);
                     clearInterval(intervalCheck);
-                    if (wordToLookup && lookupBtn) {
-                        console.log('Triggering dictionary lookup');
-                        lookupBtn.click(); // Trigger lookup
-                    }
-                } else {
-                    console.log(`Failed to select card ${cardId}, dropdown value is: ${targetCardDropdown.value}`);
-                }
+                    if (wordToLookup && lookupBtn) lookupBtn.click();
+                } else { console.warn(`Failed to select card ${cardIdToSelect} in dropdown.`); }
             }
-        }, 200); // Check every 200ms
-
-        setTimeout(() => {
-            clearInterval(intervalCheck);
-            console.log('Dictionary card selection timeout reached');
-        }, 3000); // Timeout for safety
-
-    }, 100); // Small delay for tab switch
+        }, 200);
+        setTimeout(() => { clearInterval(intervalCheck); console.log('Dictionary card selection timeout.'); }, 5000);
+    }, 150);
   }
 
-
   /**
-   * Add a new card to a deck
+   * Add a new card to a deck, now passing image/audio URLs separately
    * @param {string} deckName - Name of the deck
    */
   function addNewCardToDeck(deckName) {
     const sideA = document.getElementById('newCardSideA').value.trim();
-    const sideB = document.getElementById('newCardSideB').value.trim();
-    let sideC = document.getElementById('newCardSideC').value.trim();
+    const sideB_text = document.getElementById('newCardSideB').value.trim(); // User's text for side B
+    const sideC_text = document.getElementById('newCardSideC').value.trim(); // User's text for side C
     const tags = document.getElementById('newCardTags').value.trim();
 
-    if (!sideA || !sideB) {
-      handleError('Side A (Question) and Side B (Answer) are required.');
+    if (!sideA) {
+      handleError('Side A (Question/Word) is required.');
       return;
     }
+    // Side B can be empty if an image is provided. Side C is optional.
+    // The server will handle combining text and media tags.
 
     console.log(`Adding new card to deck: ${deckName}`);
     showLoadingIndicator();
     
-    // Check for dictionary content to include
-    const sideBElement = document.getElementById('newCardSideB');
-    const sideCElement = document.getElementById('newCardSideC');
+    const imageUrl = document.getElementById('newCardSideB').dataset.imageUrl || null;
+    const audioUrl = document.getElementById('newCardSideC').dataset.audioUrl || null;
     
-    // Check for image URL in Side B data attribute
-    if (sideBElement && sideBElement.dataset.imageUrl) {
-      const imageTag = `[IMAGE:${sideBElement.dataset.imageUrl}]`;
-      console.log(`Including image tag: ${imageTag}`);
-    }
-    
-    // Check for audio URL in Side C data attribute
-    if (sideCElement && sideCElement.dataset.audioUrl) {
-      const audioTag = `[AUDIO:${sideCElement.dataset.audioUrl}]`;
-      console.log(`Including audio tag: ${audioTag}`);
-      
-      // Append dictionary content to Side C if not already there
-      if (!sideC.includes(audioTag)) {
-        sideC = sideC + (sideC ? ' ' : '') + audioTag + ` [Source: Merriam-Webster for "${sideA}"]`;
-      }
-    }
-    
-    const cardData = { sideA, sideB, sideC, tags };
+    const cardData = { sideA: sideA, sideB: sideB_text, sideC: sideC_text, tags: tags };
 
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Add flashcard result:', result);
-        
+        hideLoadingIndicator();
         if (result && result.success) {
           showSuccess('Card added successfully!');
-          // Hide form and reset
           document.getElementById('addCardFormContainer').style.display = 'none';
           document.getElementById('newCardSideA').value = '';
           document.getElementById('newCardSideB').value = '';
@@ -693,20 +565,19 @@
           document.getElementById('newCardTags').value = '';
           document.getElementById('showAddCardFormBtn').style.display = 'inline-block';
           
-          // Clear preview containers
-          const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-          const audioPreviewContainer = document.getElementById('audioPreviewContainer');
-          if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
-          if (audioPreviewContainer) audioPreviewContainer.style.display = 'none';
+          document.getElementById('newCardSideB').removeAttribute('data-image-url');
+          document.getElementById('newCardSideC').removeAttribute('data-audio-url');
+          document.getElementById('imagePreviewContainer').style.display = 'none';
+          document.getElementById('audioPreviewContainer').style.display = 'none';
+          if (document.getElementById('imagePreview')) document.getElementById('imagePreview').src = '';
+          if (document.getElementById('audioPreview')) document.getElementById('audioPreview').src = '';
           
-          // Reload deck editor to show the new card
           showDeckEditor(deckName); 
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
           console.error('Failed to add flashcard:', errorMsg);
         }
-        hideLoadingIndicator();
       })
       .withFailureHandler(function(err) {
         const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
@@ -714,313 +585,205 @@
         console.error('Error in addFlashcard call:', errorMsg);
         hideLoadingIndicator();
       })
-      .addFlashcard(deckName, cardData);
+      .addFlashcard(deckName, cardData, imageUrl, audioUrl); // Pass URLs
   }
 
   /**
    * Show card editor form inline
    * @param {Element} cardElement - The .admin-card-item element
-   * @param {Object} card - The card object (with id, sideA, sideB, sideC, tags)
+   * @param {Object} card - The card object
    * @param {string} deckName - Name of the deck
    */
   function showCardEditorForm(cardElement, card, deckName) {
-    // Store original content to restore on cancel
     const originalContentHtml = cardElement.innerHTML;
     const cardId = card.id || card.FlashcardID || '';
     
-    // Normalize card properties to handle both naming conventions
-    const sideA = card.sideA || card.FlashcardSideA || '';
-    const sideB = card.sideB || card.FlashcardSideB || '';
-    const sideC = card.sideC || card.FlashcardSideC || '';
+    // Extract text content, attempt to separate from media tags for cleaner editing
+    // This is a simplified extraction. More robust parsing might be needed if tags are complex.
+    const sideA_text = (card.sideA || card.FlashcardSideA || '');
+    let sideB_text = (card.sideB || card.FlashcardSideB || '');
+    let sideC_text = (card.sideC || card.FlashcardSideC || '');
+
+    const imageTagMatchB = sideB_text.match(/\[IMAGE:([^\]]+)\]/);
+    const audioTagMatchC = sideC_text.match(/\[AUDIO:([^\]]+)\]/);
     
-    // Handle tags which could be string or array
+    const existingImageUrl = imageTagMatchB ? imageTagMatchB[1] : null;
+    const existingAudioUrl = audioTagMatchC ? audioTagMatchC[1] : null;
+
+    // Remove tags for cleaner display in text fields
+    sideB_text = sideB_text.replace(/\[IMAGE:[^\]]+\]\s*/gi, '').trim();
+    sideC_text = sideC_text.replace(/\[AUDIO:[^\]]+\]\s*|\[Source:[^\]]+\]\s*/gi, '').trim();
+
+
     let tagsValue = '';
-    if (Array.isArray(card.tags)) {
-      tagsValue = card.tags.join(', ');
-    } else if (typeof card.tags === 'string') {
-      tagsValue = card.tags;
-    } else if (card.Tags) {
-      if (Array.isArray(card.Tags)) {
-        tagsValue = card.Tags.join(', ');
-      } else {
-        tagsValue = String(card.Tags);
-      }
-    }
+    if (Array.isArray(card.tags)) tagsValue = card.tags.join(', ');
+    else if (typeof card.tags === 'string') tagsValue = card.tags;
+    else if (card.Tags) tagsValue = Array.isArray(card.Tags) ? card.Tags.join(', ') : String(card.Tags);
     
     console.log(`Showing editor form for card: ${cardId}`);
-
     cardElement.innerHTML = `
       <div class="card-edit-form" style="background-color: #f9f9f9; padding: 10px; border-radius: 4px;">
         <h4>Edit Card (ID: ${escapeHtml(cardId)})</h4>
         <div class="form-group">
           <label for="editCardSideA-${cardId}" class="form-label">Side A (Question/Word)</label>
-          <input type="text" id="editCardSideA-${cardId}" class="form-control" value="${escapeHtml(sideA)}" required>
+          <input type="text" id="editCardSideA-${cardId}" class="form-control" value="${escapeHtml(sideA_text)}" required>
         </div>
-        
         <div class="form-group">
-          <label for="editCardSideB-${cardId}" class="form-label">Side B (Answer)</label>
+          <label for="editCardSideB-${cardId}" class="form-label">Side B (Answer/Text)</label>
           <div class="input-with-button">
-            <input type="text" id="editCardSideB-${cardId}" class="form-control" value="${escapeHtml(sideB)}" required>
+            <input type="text" id="editCardSideB-${cardId}" class="form-control" value="${escapeHtml(sideB_text)}">
             <button id="editGetImageBtn-${cardId}" class="btn btn-sm">Get Image</button>
           </div>
-          <div id="editImagePreviewContainer-${cardId}" class="preview-container" style="display: none; margin-top: 10px;">
-            <img id="editImagePreview-${cardId}" style="max-width: 100%; max-height: 150px; object-fit: contain;">
+          <div id="editImagePreviewContainer-${cardId}" class="preview-container" style="display: ${existingImageUrl ? 'block' : 'none'}; margin-top: 10px;">
+            <img id="editImagePreview-${cardId}" src="${existingImageUrl || ''}" style="max-width: 100%; max-height: 150px; object-fit: contain;">
           </div>
         </div>
-        
         <div class="form-group">
-          <label for="editCardSideC-${cardId}" class="form-label">Side C (Additional Info)</label>
+          <label for="editCardSideC-${cardId}" class="form-label">Side C (Additional Info/Text)</label>
           <div class="input-with-button">
-            <textarea id="editCardSideC-${cardId}" class="form-control" rows="3">${escapeHtml(sideC)}</textarea>
+            <textarea id="editCardSideC-${cardId}" class="form-control" rows="3">${escapeHtml(sideC_text)}</textarea>
             <button id="editGetAudioBtn-${cardId}" class="btn btn-sm">Get Audio</button>
           </div>
-          <div id="editAudioPreviewContainer-${cardId}" class="preview-container" style="display: none; margin-top: 10px;">
-            <audio id="editAudioPreview-${cardId}" controls style="width: 100%;"></audio>
+          <div id="editAudioPreviewContainer-${cardId}" class="preview-container" style="display: ${existingAudioUrl ? 'block' : 'none'}; margin-top: 10px;">
+            <audio id="editAudioPreview-${cardId}" src="${existingAudioUrl || ''}" controls style="width: 100%;"></audio>
           </div>
         </div>
-        
         <div class="form-group">
           <label for="editCardTags-${cardId}" class="form-label">Tags</label>
           <input type="text" id="editCardTags-${cardId}" class="form-control" value="${escapeHtml(tagsValue)}">
         </div>
-        
         <div class="form-actions">
           <button class="btn btn-secondary btn-sm" data-action="save-edit" data-card-id="${cardId}">Save</button>
           <button class="btn btn-outline btn-sm" data-action="cancel-edit">Cancel</button>
         </div>
       </div>
     `;
+    
+    // Store existing URLs in dataset for submission if not changed
+    if (existingImageUrl) document.getElementById(`editCardSideB-${cardId}`).dataset.imageUrl = existingImageUrl;
+    if (existingAudioUrl) document.getElementById(`editCardSideC-${cardId}`).dataset.audioUrl = existingAudioUrl;
 
-    cardElement.querySelector('[data-action="save-edit"]').addEventListener('click', function() {
-      updateEditedCard(cardId, deckName);
-    });
-
+    cardElement.querySelector('[data-action="save-edit"]').addEventListener('click', function() { updateEditedCard(cardId, deckName); });
     cardElement.querySelector('[data-action="cancel-edit"]').addEventListener('click', function() {
-      cardElement.innerHTML = originalContentHtml; // Restore original
-      // Re-attach listeners for the restored buttons
+      cardElement.innerHTML = originalContentHtml; 
       const restoredEditBtn = cardElement.querySelector('[data-action="edit-card"]');
-      if (restoredEditBtn) {
-          restoredEditBtn.addEventListener('click', () => showCardEditorForm(cardElement, card, deckName));
-      }
+      if (restoredEditBtn) restoredEditBtn.addEventListener('click', () => showCardEditorForm(cardElement, card, deckName));
       const restoredDeleteBtn = cardElement.querySelector('[data-action="delete-card"]');
-      if (restoredDeleteBtn) {
-          restoredDeleteBtn.addEventListener('click', () => deleteCardFromDeck(cardId, deckName));
-      }
+      if (restoredDeleteBtn) restoredDeleteBtn.addEventListener('click', () => deleteCardFromDeck(cardId, deckName));
       const restoredDictBtn = cardElement.querySelector('[data-action="add-dictionary"]');
-      if (restoredDictBtn) {
-          restoredDictBtn.addEventListener('click', () => handleDictionaryForCard(card, deckName));
-      }
+      if (restoredDictBtn) restoredDictBtn.addEventListener('click', () => handleDictionaryForCard(card, deckName));
     });
-
     document.getElementById(`editGetImageBtn-${cardId}`).addEventListener('click', function() {
       const wordInput = document.getElementById(`editCardSideA-${cardId}`).value.trim();
-      if (!wordInput) {
-        showError('Please enter a word in Side A first');
-        return;
-      }
-      
-      fetchDictionaryImageForWord(wordInput, cardId, true);
+      if (!wordInput) { showError('Please enter a word in Side A first'); return; }
+      fetchMultimediaForItem(wordInput, 'image', `editCardSideB-${cardId}`, `editImagePreviewContainer-${cardId}`, `editImagePreview-${cardId}`);
     });
-
     document.getElementById(`editGetAudioBtn-${cardId}`).addEventListener('click', function() {
       const wordInput = document.getElementById(`editCardSideA-${cardId}`).value.trim();
-      if (!wordInput) {
-        showError('Please enter a word in Side A first');
-        return;
-      }
-      
-      fetchDictionaryAudioForWord(wordInput, cardId, true);
+      if (!wordInput) { showError('Please enter a word in Side A first'); return; }
+      fetchMultimediaForItem(wordInput, 'audio', `editCardSideC-${cardId}`, `editAudioPreviewContainer-${cardId}`, `editAudioPreview-${cardId}`);
     });
   }
 
   /**
-   * Fetches dictionary image for a word and displays it in the preview
-   * 
-   * @param {string} word - The word to look up
-   * @param {string} cardId - Optional card ID for edit mode
-   * @param {boolean} isEditMode - Whether this is for edit mode
+   * Fetches multimedia (image or audio) for a word and displays it in the preview.
+   * Stores the URL in the target input's dataset.
+   * @param {string} word - The word to look up.
+   * @param {'image'|'audio'} type - Type of media to fetch.
+   * @param {string} targetInputId - ID of the input field to store the URL (e.g., 'newCardSideB').
+   * @param {string} previewContainerId - ID of the preview container element.
+   * @param {string} previewElementId - ID of the img or audio element for preview.
    */
-  function fetchDictionaryImageForWord(word, cardId = '', isEditMode = false) {
+  function fetchMultimediaForItem(word, type, targetInputId, previewContainerId, previewElementId) {
     showLoadingIndicator();
-    console.log(`Fetching dictionary image for word: "${word}"`);
+    console.log(`Fetching ${type} for word: "${word}"`);
     
     google.script.run
       .withSuccessHandler(function(result) {
         hideLoadingIndicator();
-        console.log('Dictionary lookup result:', result);
+        console.log(`Multimedia lookup result for ${type}:`, result);
         
-        if (result && result.success) {
-          if (result.imageUrl) {
-            // Set up the preview container and image selectors based on mode
-            const previewContainerId = isEditMode ? `editImagePreviewContainer-${cardId}` : 'imagePreviewContainer';
-            const previewImgId = isEditMode ? `editImagePreview-${cardId}` : 'imagePreview';
-            
-            // Show the image in preview
-            const previewContainer = document.getElementById(previewContainerId);
-            const previewImg = document.getElementById(previewImgId);
-            
-            if (previewContainer && previewImg) {
-              previewImg.src = result.imageUrl;
-              previewImg.alt = `Image for ${word}`;
-              previewContainer.style.display = 'block';
-              
-              // Add a data attribute to the form to store the image URL
-              const imageTag = `[IMAGE:${result.imageUrl}]`;
-              
-              // For edit mode, append to SideB if it exists
-              if (isEditMode) {
-                // For edit mode, we'll append the image tag if SideB has content
-                const sideB = document.getElementById(`editCardSideB-${cardId}`);
-                if (sideB) {
-                  // Store in a data attribute for later use during save
-                  sideB.dataset.imageUrl = result.imageUrl;
-                }
-              } else {
-                // For add mode, store in Side B field's data attribute
-                const sideB = document.getElementById('newCardSideB');
-                if (sideB) {
-                  // Store in a data attribute for later use during save
-                  sideB.dataset.imageUrl = result.imageUrl;
-                }
-              }
-              
-              showSuccess(`Image found for "${word}"`);
-            } else {
-              console.error(`Preview elements not found: container=${previewContainerId}, img=${previewImgId}`);
-              showError('Could not display image preview');
-            }
-          } else {
-            showError(`No image found for "${word}"`);
+        const targetInput = document.getElementById(targetInputId);
+        const previewContainer = document.getElementById(previewContainerId);
+        const previewElement = document.getElementById(previewElementId);
+
+        if (!targetInput || !previewContainer || !previewElement) {
+          console.error(`One or more UI elements not found for ${type} preview.`);
+          showError('UI error displaying preview.');
+          return;
+        }
+        
+        let urlToUse = null;
+        if (type === 'image' && result.imageUrl) urlToUse = result.imageUrl;
+        if (type === 'audio' && result.audioUrl) urlToUse = result.audioUrl;
+
+        if (result && result.success && urlToUse) {
+          if (type === 'image') {
+            previewElement.src = urlToUse;
+            previewElement.alt = `Preview for ${word}`;
+            targetInput.dataset.imageUrl = urlToUse;
+          } else if (type === 'audio') {
+            previewElement.src = urlToUse;
+            targetInput.dataset.audioUrl = urlToUse;
           }
+          previewContainer.style.display = 'block';
+          showSuccess(`${type.charAt(0).toUpperCase() + type.slice(1)} found for "${word}"`);
         } else {
-          showError(result ? result.message : 'Error looking up dictionary content');
+          const specificMessage = (type === 'image' && result.message.includes("Image:")) || (type === 'audio' && result.message.includes("Audio:"))
+                                ? result.message
+                                : `No ${type} found for "${word}". General: ${result.message}`;
+          showError(specificMessage);
+          // Clear previous preview if any
+          previewContainer.style.display = 'none';
+          previewElement.src = '';
+          if (type === 'image') targetInput.removeAttribute('data-image-url');
+          if (type === 'audio') targetInput.removeAttribute('data-audio-url');
         }
       })
       .withFailureHandler(function(err) {
         hideLoadingIndicator();
-        showError('Error fetching dictionary content: ' + (err.message || err));
-        console.error('Error in dictionary lookup:', err);
+        showError(`Error fetching ${type}: ` + (err.message || err));
+        console.error(`Error in ${type} lookup:`, err);
       })
-      .previewDictionaryContent(word);
+      .previewDictionaryContent(word); // Server-side function name is still previewDictionaryContent
   }
-
+  
   /**
-   * Fetches dictionary audio for a word and displays it in the preview
-   * 
-   * @param {string} word - The word to look up
-   * @param {string} cardId - Optional card ID for edit mode
-   * @param {boolean} isEditMode - Whether this is for edit mode
-   */
-  function fetchDictionaryAudioForWord(word, cardId = '', isEditMode = false) {
-    showLoadingIndicator();
-    console.log(`Fetching dictionary audio for word: "${word}"`);
-    
-    google.script.run
-      .withSuccessHandler(function(result) {
-        hideLoadingIndicator();
-        console.log('Dictionary lookup result:', result);
-        
-        if (result && result.success) {
-          if (result.audioUrl) {
-            // Set up the preview container and audio selectors based on mode
-            const previewContainerId = isEditMode ? `editAudioPreviewContainer-${cardId}` : 'audioPreviewContainer';
-            const previewAudioId = isEditMode ? `editAudioPreview-${cardId}` : 'audioPreview';
-            
-            // Show the audio in preview
-            const previewContainer = document.getElementById(previewContainerId);
-            const previewAudio = document.getElementById(previewAudioId);
-            
-            if (previewContainer && previewAudio) {
-              previewAudio.src = result.audioUrl;
-              previewContainer.style.display = 'block';
-              
-              // Add a data attribute to the form to store the audio URL
-              const audioTag = `[AUDIO:${result.audioUrl}]`;
-              
-              // For edit mode, append to SideC if it exists
-              if (isEditMode) {
-                const sideC = document.getElementById(`editCardSideC-${cardId}`);
-                if (sideC) {
-                  // Store in a data attribute for later use during save
-                  sideC.dataset.audioUrl = result.audioUrl;
-                }
-              } else {
-                // For add mode, store in Side C field's data attribute
-                const sideC = document.getElementById('newCardSideC');
-                if (sideC) {
-                  // Store in a data attribute for later use during save
-                  sideC.dataset.audioUrl = result.audioUrl;
-                }
-              }
-              
-              showSuccess(`Audio found for "${word}"`);
-            } else {
-              console.error(`Preview elements not found: container=${previewContainerId}, audio=${previewAudioId}`);
-              showError('Could not display audio preview');
-            }
-          } else {
-            showError(`No audio found for "${word}"`);
-          }
-        } else {
-          showError(result ? result.message : 'Error looking up dictionary content');
-        }
-      })
-      .withFailureHandler(function(err) {
-        hideLoadingIndicator();
-        showError('Error fetching dictionary content: ' + (err.message || err));
-        console.error('Error in dictionary lookup:', err);
-      })
-      .previewDictionaryContent(word);
-  }
-
-  /**
-   * Update an edited card
+   * Update an edited card, now passing image/audio URLs separately
    * @param {string} cardId - ID of the card
    * @param {string} deckName - Name of the deck
    */
   function updateEditedCard(cardId, deckName) {
-    const sideA = document.getElementById(`editCardSideA-${cardId}`).value.trim();
-    const sideB = document.getElementById(`editCardSideB-${cardId}`).value.trim();
-    let sideC = document.getElementById(`editCardSideC-${cardId}`).value.trim();
+    const sideA_text = document.getElementById(`editCardSideA-${cardId}`).value.trim();
+    const sideB_text = document.getElementById(`editCardSideB-${cardId}`).value.trim();
+    const sideC_text = document.getElementById(`editCardSideC-${cardId}`).value.trim();
     const tags = document.getElementById(`editCardTags-${cardId}`).value.trim();
 
-    if (!sideA || !sideB) {
-      handleError('Side A and Side B are required.');
+    if (!sideA_text) {
+      handleError('Side A is required.');
       return;
     }
     
     console.log(`Updating card ${cardId} in deck ${deckName}`);
     showLoadingIndicator();
     
-    // Check for dictionary content to include
-    const sideCElement = document.getElementById(`editCardSideC-${cardId}`);
-    
-    // Check for audio URL in Side C data attribute
-    if (sideCElement && sideCElement.dataset.audioUrl) {
-      const audioTag = `[AUDIO:${sideCElement.dataset.audioUrl}]`;
-      console.log(`Including audio tag: ${audioTag}`);
-      
-      // Append dictionary content to Side C if not already there
-      if (!sideC.includes(audioTag)) {
-        sideC = sideC + (sideC ? ' ' : '') + audioTag + ` [Source: Merriam-Webster for "${sideA}"]`;
-      }
-    }
-    
-    const cardData = { sideA, sideB, sideC, tags };
+    const imageUrl = document.getElementById(`editCardSideB-${cardId}`).dataset.imageUrl || null;
+    const audioUrl = document.getElementById(`editCardSideC-${cardId}`).dataset.audioUrl || null;
+        
+    const cardData = { sideA: sideA_text, sideB: sideB_text, sideC: sideC_text, tags: tags };
 
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Update flashcard result:', result);
-        
+        hideLoadingIndicator();
         if (result && result.success) {
           showSuccess('Card updated successfully!');
-          showDeckEditor(deckName); // Reload the deck editor view
+          showDeckEditor(deckName);
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
           console.error('Failed to update flashcard:', errorMsg);
         }
-        hideLoadingIndicator();
       })
       .withFailureHandler(function(err) {
         const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
@@ -1028,7 +791,7 @@
         console.error('Error in updateFlashcard call:', errorMsg);
         hideLoadingIndicator();
       })
-      .updateFlashcard(deckName, cardId, cardData);
+      .updateFlashcard(deckName, cardId, cardData, imageUrl, audioUrl); // Pass URLs
   }
 
   /**
@@ -1042,20 +805,18 @@
     }
     console.log(`Deleting card ${cardId} from deck ${deckName}`);
     showLoadingIndicator();
-    
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Delete flashcard result:', result);
-        
+        hideLoadingIndicator();
         if (result && result.success) {
           showSuccess('Card deleted successfully!');
-          showDeckEditor(deckName); // Reload
+          showDeckEditor(deckName); 
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
           console.error('Failed to delete flashcard:', errorMsg);
         }
-        hideLoadingIndicator();
       })
       .withFailureHandler(function(err) {
         const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
@@ -1072,31 +833,25 @@
   function loadUserList() {
     showLoadingIndicator();
     console.log('Loading user list for admin panel');
-    
     google.script.run
       .withSuccessHandler(function(result) {
         console.log('Get users result:', result);
-        
+        hideLoadingIndicator();
         if (result && result.success) {
           displayUserList(result.users || []);
         } else {
           const errorMsg = result ? result.message : 'Unknown error occurred';
           handleError(errorMsg);
           const userListTbody = document.querySelector('#userList table tbody');
-          if (userListTbody) {
-            userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(errorMsg)}</td></tr>`;
-          }
+          if (userListTbody) userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(errorMsg)}</td></tr>`;
           console.error('Failed to load users:', errorMsg);
         }
-        hideLoadingIndicator();
       })
       .withFailureHandler(function(err) {
         const errorMsg = err && err.message ? err.message : (err ? err.toString() : 'Unknown error');
         handleError(errorMsg);
         const userListTbody = document.querySelector('#userList table tbody');
-        if (userListTbody) {
-          userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(errorMsg)}</td></tr>`;
-        }
+        if (userListTbody) userListTbody.innerHTML = `<tr><td colspan="5">Error loading users: ${escapeHtml(errorMsg)}</td></tr>`;
         console.error('Error in getUsers call:', errorMsg);
         hideLoadingIndicator();
       })
@@ -1113,15 +868,13 @@
       console.error('User list table body not found.');
       return;
     }
-
     let html = '';
     if (!Array.isArray(users) || users.length === 0) {
       html = '<tr><td colspan="5">No users found.</td></tr>';
     } else {
       console.log(`Displaying ${users.length} users in admin panel`);
-      
       users.forEach(user => {
-        const isAdmin = user.IsAdmin === 'TRUE' || user.IsAdmin === true;
+        const isAdmin = user.IsAdmin === true || String(user.IsAdmin).toLowerCase() === 'true';
         const lastLogin = user.LastLogin ? new Date(user.LastLogin).toLocaleString() : 'Never';
         html += `
           <tr>
@@ -1131,21 +884,17 @@
             <td>${escapeHtml(lastLogin)}</td>
             <td>
               <button class="btn btn-outline btn-sm" data-action="view-progress" data-username="${escapeHtml(user.UserName || '')}" disabled>Progress</button>
-              <!-- Add other user actions here, e.g., edit user, reset password -->
             </td>
           </tr>
         `;
       });
     }
     userListTableBody.innerHTML = html;
-
-    // Add event listeners for any new buttons (currently 'view-progress' is disabled)
     userListTableBody.querySelectorAll('[data-action="view-progress"]').forEach(btn => {
       if (!btn.disabled) {
         btn.addEventListener('click', function() {
           const username = this.getAttribute('data-username');
           console.log(`View progress button clicked for user: ${username}`);
-          // TODO: Implement view progress functionality
           alert('View progress for ' + username + ' (not implemented yet)');
         });
       }
