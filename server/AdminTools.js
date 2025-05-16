@@ -50,66 +50,8 @@ function getAdminAccess() {
   }
 }
 
-/**
- * Force direct check of admin status from the Config sheet
- * This bypasses any cached session data or existing admin checks
- * 
- * @param {string} username - User to check
- * @return {boolean} True if user is admin, false otherwise
- */
 function forceAdminCheck(username) {
-  try {
-    const ss = getDatabaseSpreadsheet(); // From Database.js
-    const configSheet = ss.getSheetByName('Config');
-    
-    if (!configSheet) {
-      Logger.log("CRITICAL: Config sheet not found during force admin check");
-      return false;
-    }
-    
-    const data = configSheet.getDataRange().getValues();
-    if (data.length <= 1) {
-        Logger.log("forceAdminCheck: Config sheet is empty or has only headers.");
-        return false;
-    }
-    const headers = data[0].map(h => String(h).trim());
-    const usernameIndex = headers.indexOf('UserName');
-    const isAdminIndex = headers.indexOf('IsAdmin');
-
-    if (usernameIndex === -1 || isAdminIndex === -1) {
-        Logger.log(`forceAdminCheck: Critical columns missing. UserName index: ${usernameIndex}, IsAdmin index: ${isAdminIndex}`);
-        return false;
-    }
-    
-    Logger.log(`forceAdminCheck: For user "${username}". UserName column: ${usernameIndex}, IsAdmin column: ${isAdminIndex}`);
-    
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === username.toLowerCase()) {
-        const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
-        const isAdminValue = isAdminCell.getValue();
-        let isCheckedByMethod = false;
-        try {
-            isCheckedByMethod = isAdminCell.isChecked();
-        } catch(e) {
-            Logger.log(`forceAdminCheck: isChecked() method failed for cell ${isAdminCell.getA1Notation()}: ${e.message}`);
-        }
-
-        const isAdmin = isAdminValue === true || 
-                        String(isAdminValue).toUpperCase() === 'TRUE' || 
-                        isCheckedByMethod === true;
-        
-        Logger.log(`forceAdminCheck: User "${username}" found. Raw value: ${isAdminValue}, isChecked(): ${isCheckedByMethod}, Final isAdmin: ${isAdmin}`);
-        return isAdmin;
-      }
-    }
-    
-    Logger.log(`forceAdminCheck: User ${username} not found in Config sheet`);
-    return false;
-  } catch (error) {
-    Logger.log(`Error in forceAdminCheck for "${username}": ${error.message}\nStack: ${error.stack}`);
-    return false;
-  }
+  return getIsUserAdmin(username);
 }
 
 /**

@@ -444,82 +444,78 @@ function addUser(userData) {
 
 // Add this to server/Database.js - New function to get admin status directly
 
+function isUserAdminInSheet(username) {
+  return getIsUserAdmin(username);
+}
+
 /**
- * Directly checks if a user is an admin by examining the checkbox in the Config sheet
+ * Unified method to check admin status directly from the Config sheet.
+ * This function ensures consistent admin status determination across different parts of the app.
  * 
  * @param {string} username - The username to check
  * @return {boolean} True if the user is an admin, false otherwise
  */
-function isUserAdminInSheet(username) {
+function getIsUserAdmin(username) {
   try {
-    // Get the spreadsheet and Config sheet
+    if (!username || typeof username !== 'string') {
+      Logger.log("getIsUserAdmin: Invalid username parameter");
+      return false;
+    }
+    
     const ss = getDatabaseSpreadsheet();
     const configSheet = ss.getSheetByName('Config');
     
     if (!configSheet) {
-      Logger.log("CRITICAL: 'Config' sheet not found during admin check");
+      Logger.log("getIsUserAdmin: Config sheet not found");
       return false;
     }
     
-    // Get all the data to search for the user
     const data = configSheet.getDataRange().getValues();
-    if (data.length <= 1) {
-      Logger.log("Config sheet has no data or only headers");
-      return false;
-    }
-    
-    // Find column indices - specifically UserName (C) and IsAdmin (E)
-    const headers = data[0];
+    const headers = data[0].map(h => String(h).trim());
     const usernameIndex = headers.indexOf('UserName');
     const isAdminIndex = headers.indexOf('IsAdmin');
     
-    // Log what we found to check if columns are correctly identified
-    Logger.log(`isUserAdminInSheet: UserName column index: ${usernameIndex}, IsAdmin column index: ${isAdminIndex}`);
-    
     if (usernameIndex === -1 || isAdminIndex === -1) {
-      Logger.log(`CRITICAL: Required columns not found. UserName: ${usernameIndex}, IsAdmin: ${isAdminIndex}`);
+      Logger.log(`getIsUserAdmin: Required columns not found. UserName index: ${usernameIndex}, IsAdmin index: ${isAdminIndex}`);
       return false;
     }
     
-    // Loop through the rows to find the user
+    const lowerCaseUsername = username.toLowerCase();
+    
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      if (row[usernameIndex] && row[usernameIndex].toString().toLowerCase() === username.toLowerCase()) {
-        // Found the user - now check the IsAdmin value directly
-        // First log the raw value for debugging
-        Logger.log(`Raw IsAdmin value for ${username} from getValues(): ${row[isAdminIndex]} (type: ${typeof row[isAdminIndex]})`);
+      if (row[usernameIndex] && String(row[usernameIndex]).toLowerCase() === lowerCaseUsername) {
+        // Found the user - now check admin status with multiple methods for robustness
         
-        // Use getRange().getValue() method which might better preserve checkbox state
+        // Method 1: Get direct cell value
         const isAdminCell = configSheet.getRange(i + 1, isAdminIndex + 1);
-        const checkboxValue = isAdminCell.getValue();
-        Logger.log(`Direct checkbox value for ${username} using getValue(): ${checkboxValue} (type: ${typeof checkboxValue})`);
+        const rawValue = isAdminCell.getValue();
         
-        // Try the isChecked() method specifically for checkboxes (may not work in all cases)
-        let isChecked = false;
+        // Method 2: Try checkbox-specific method (may not work in all cases)
+        let isCheckedValue = false;
         try {
-          isChecked = isAdminCell.isChecked();
-          Logger.log(`isChecked() method result for ${username}: ${isChecked}`);
+          isCheckedValue = isAdminCell.isChecked();
         } catch (e) {
-          Logger.log(`isChecked() method not available or error: ${e.message}`);
+          Logger.log(`getIsUserAdmin: isChecked() method failed: ${e.message}`);
         }
         
-        // Now make the final determination based on all available data
-        // This handles multiple possible representations of a checked checkbox
-        const isAdmin = checkboxValue === true || 
-                        checkboxValue === 'TRUE' || 
-                        checkboxValue === 1 || 
-                        isChecked === true;
+        // Method 3: String conversion check
+        const stringCheck = String(rawValue).toUpperCase() === 'TRUE';
         
-        Logger.log(`Final isAdmin determination for ${username}: ${isAdmin}`);
+        // Combined check - user is admin if ANY method indicates admin
+        const isAdmin = rawValue === true || isCheckedValue === true || stringCheck;
+        
+        Logger.log(`getIsUserAdmin: User "${username}" admin status determined: ${isAdmin}`);
+        Logger.log(`getIsUserAdmin: Raw methods - rawValue:${rawValue}(${typeof rawValue}), isChecked:${isCheckedValue}, stringCheck:${stringCheck}`);
+        
         return isAdmin;
       }
     }
     
-    // User not found
-    Logger.log(`User ${username} not found in Config sheet`);
+    Logger.log(`getIsUserAdmin: User "${username}" not found in Config sheet`);
     return false;
   } catch (error) {
-    Logger.log(`Error in isUserAdminInSheet for "${username}": ${error.message}\nStack: ${error.stack}`);
+    Logger.log(`Error in getIsUserAdmin for "${username}": ${error.message}\nStack: ${error.stack}`);
     return false;
   }
 }
