@@ -374,77 +374,53 @@ function addDictionaryContentToCard(deckName, cardId, word) {
   }
 }
 
-/**
- * Renders content string with [AUDIO], [IMAGE], and [Source] tags into HTML.
- * @param {string} contentString - The raw content string from the sheet.
- * @return {string} HTML string with media tags rendered.
- */
-function renderDictionaryContent(contentString) {
-  // PHASE 3 LOGGING: Log input
-  Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Received contentString: "${contentString}"`);
-
-  if (!contentString || typeof contentString !== 'string') {
-    Logger.log("DictionaryIntegration.js: renderDictionaryContent - Empty or invalid contentString, returning empty string.");
-    return '';
-  }
-
-  const splitRegex = /(\[AUDIO:[^\]]+\]|\[IMAGE:[^\]]+\]|\[Source:[^\]]+\])/g;
-  const tokens = contentString.split(splitRegex).filter(Boolean); 
-  Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Tokens after split: ${JSON.stringify(tokens)}`);
-
-  let resultHtml = '';
-
-  tokens.forEach(token => {
-    Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Tokenizing. Current token: "${token}"`);
-    if (token.startsWith('[AUDIO:')) {
-      let url = token.substring(7, token.length - 1); 
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Matched [AUDIO:]. Raw URL: "${url}"`);
-      const safeUrl = escapeHtmlServerSide(url); 
-      resultHtml += `
-        <div class="flashcard-audio">
-          <button class="audio-play-btn" data-audio-url="${safeUrl}">
-            <span class="material-icons">play_arrow</span>
-            <audio class="hidden-audio-element" src="${safeUrl}" preload="metadata"></audio>
-          </button>
-        </div>
-      `;
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Added AUDIO HTML for URL: "${safeUrl}"`);
-    } else if (token.startsWith('[IMAGE:')) {
-      let url = token.substring(8, token.length - 1); 
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Matched [IMAGE:]. Raw URL: "${url}"`);
-      
-      if (url.startsWith('ttps://')) {
-        Logger.log(`DictionaryIntegration.js: renderDictionaryContent - WARNING: Detected 'ttps://' in image URL: ${url}. Attempting correction.`);
-        url = 'h' + url; 
-        Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Corrected image URL to: ${url}`);
-      } else if (url.startsWith('ttp://')) { // Log http urls too, they might cause mixed content issues
-        Logger.log(`DictionaryIntegration.js: renderDictionaryContent - INFO: Image URL uses 'http://': ${url}. Consider 'https://'.`);
-      }
-      
-      const safeUrl = escapeHtmlServerSide(url); 
-      const altText = "Illustration for card content"; // More generic alt
-      const onErrorJs = `this.alt='Image failed to load'; this.style.display='none'; this.parentElement.innerHTML='<p style=\\'color:red; font-size:small; text-align:center; padding:10px; border:1px dashed red;\\'>Image failed to load.<br><span style=\\'font-size:x-small;\\'>URL: ${escapeHtmlServerSide(url.length > 60 ? url.substring(0,60)+'...' : url)}</span></p>'; console.error('Failed to load image (onerror event):', this.src);`;
-
-      resultHtml += `
+// Update the renderDictionaryContent function in your flashcards.js file
+function renderDictionaryContent(content, cardSide) {
+    console.log(`renderDictionaryContent called with content starting with: ${content.substring(0, 50)}...`);
+    
+    // Check if content contains image tag
+    if (content.includes("[IMAGE:")) {
+        // Extract the URL from between the [IMAGE:] tags
+        const imageUrl = content.match(/\[IMAGE:(.*?)\]/)[1];
+        console.log(`Extracted image URL: ${imageUrl}`);
+        
+        // Create the HTML for the image display
+        const html = `
         <div class="flashcard-image">
-          <img src="${safeUrl}" alt="${escapeHtmlServerSide(altText)}" class="centered-card-image" onerror="${escapeHtmlServerSide(onErrorJs)}">
-        </div>
-      `;
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Added IMAGE HTML for URL: "${safeUrl}"`);
-    } else if (token.startsWith('[Source:')) {
-      const sourceText = token.substring(8, token.length - 1); 
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Matched [Source:]. Text: "${sourceText}" (CSS will hide this on flashcard)`);
-      resultHtml += `<span class="source-text">Source: ${escapeHtmlServerSide(sourceText)}</span>`;
-    } else {
-      let textSegment = escapeHtmlServerSide(token);
-      textSegment = textSegment.replace(/\r\n|\r|\n/g, '<br>'); 
-      resultHtml += textSegment;
-      Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Matched plain text (after escaping and <br>): "${textSegment}"`);
+          <img src="${imageUrl}" alt="Flashcard image" class="card-media-image">
+        </div>`;
+        
+        console.log(`Generated image HTML: ${html.substring(0, 100)}...`);
+        return html;
     }
-  });
-  // PHASE 3 LOGGING: Log output
-  Logger.log(`DictionaryIntegration.js: renderDictionaryContent - Producing HTML: "${resultHtml}"`);
-  return resultHtml;
+    // Check if content contains audio tag
+    else if (content.includes("[AUDIO:")) {
+        // Extract the audio data URL from between the [AUDIO:] tags
+        const audioUrl = content.match(/\[AUDIO:(.*?)\]/)[1];
+        console.log(`Extracted audio URL length: ${audioUrl.length} characters`);
+        
+        // Create a unique ID for this audio button
+        const buttonId = `audio-btn-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        
+        // Create the HTML for the audio player with the button
+        const html = `
+        <div class="flashcard-audio">
+          <button class="audio-play-btn" id="${buttonId}" data-audio-url="${audioUrl}">
+            <i class="fas fa-play"></i> Play Audio
+          </button>
+          <audio class="audio-element" style="display:none;">
+            <source src="${audioUrl}" type="audio/mpeg">
+            Your browser does not support the audio element.
+          </audio>
+        </div>`;
+        
+        console.log(`Generated audio HTML with button ID: ${buttonId}`);
+        return html;
+    }
+    // Regular text content
+    else {
+        return `<div class="flashcard-text">${content}</div>`;
+    }
 }
 
 function escapeHtmlServerSide(str) {
@@ -471,3 +447,117 @@ function escapeRegex(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// Add this function to help debug URL issues
+function sanitizePixabayUrl(url) {
+    // If URL is already truncated in the logs, this won't fix it
+    // But if it has ...some_slug in it, this will remove it
+    if (url.includes('...')) {
+        console.error(`Found truncated URL: ${url}`);
+        // Try to extract the base part
+        const match = url.match(/(https:\/\/pixabay\.com\/get\/[a-zA-Z0-9]+)/);
+        if (match) {
+            // Append standard ending
+            return `${match[1]}_640.jpg`;
+        }
+    }
+    
+    // Make sure URL ends with appropriate suffix
+    if (!url.endsWith('.jpg') && !url.endsWith('.png')) {
+        if (url.includes('_640')) {
+            return `${url}.jpg`;
+        } else {
+            return `${url}_640.jpg`;
+        }
+    }
+    
+    return url;
+}
+
+// Then modify the renderDictionaryContent function to use this:
+// Update where you extract the image URL:
+const imageUrl = sanitizePixabayUrl(content.match(/\[IMAGE:(.*?)\]/)[1]);
+
+// Add this debugging function
+function debugFlashcardMedia() {
+    console.log("---- DEBUGGING FLASHCARD MEDIA ----");
+    
+    // Check for images
+    const images = document.querySelectorAll('.card-media-image');
+    console.log(`Found ${images.length} card images on page`);
+    
+    images.forEach((img, i) => {
+        console.log(`Image #${i+1} src: ${img.src}`);
+        console.log(`Image #${i+1} display: ${window.getComputedStyle(img).display}`);
+        console.log(`Image #${i+1} visibility: ${window.getComputedStyle(img).visibility}`);
+        console.log(`Image #${i+1} dimensions: ${img.width}x${img.height}`);
+        
+        // Check if image loaded properly
+        if (img.complete) {
+            if (img.naturalWidth === 0) {
+                console.error(`Image #${i+1} failed to load properly!`);
+            } else {
+                console.log(`Image #${i+1} loaded successfully`);
+            }
+        } else {
+            console.log(`Image #${i+1} still loading...`);
+            img.addEventListener('load', () => {
+                console.log(`Image #${i+1} loaded successfully after wait`);
+            });
+            img.addEventListener('error', () => {
+                console.error(`Image #${i+1} failed to load with error!`);
+            });
+        }
+    });
+    
+    // Check for audio elements
+    const audioElements = document.querySelectorAll('audio');
+    console.log(`Found ${audioElements.length} audio elements on page`);
+    
+    audioElements.forEach((audio, i) => {
+        const source = audio.querySelector('source');
+        console.log(`Audio #${i+1} src: ${source ? source.src.substring(0, 50) + '...' : 'No source'}`);
+        console.log(`Audio #${i+1} ready state: ${audio.readyState}`);
+    });
+    
+    // Check for audio buttons
+    const audioButtons = document.querySelectorAll('.audio-play-btn');
+    console.log(`Found ${audioButtons.length} audio buttons on page`);
+    
+    audioButtons.forEach((btn, i) => {
+        console.log(`Button #${i+1} id: ${btn.id}`);
+        console.log(`Button #${i+1} visibility: ${window.getComputedStyle(btn).visibility}`);
+        console.log(`Button #${i+1} has click listener: ${!!btn.onclick || 'Unknown'}`);
+    });
+    
+    console.log("---- END DEBUGGING FLASHCARD MEDIA ----");
+}
+
+// Call this function after displaying flashcards
+setTimeout(debugFlashcardMedia, 500);
+
+// Add this helper function for audio data URLs
+function ensureValidDataUrl(url) {
+    // Check if it's a data URL
+    if (url.startsWith('data:audio/mpeg;base64,')) {
+        // It's already a valid data URL
+        return url;
+    }
+    
+    // If it contains the data URL but with extra text around it
+    const match = url.match(/(data:audio\/mpeg;base64,[A-Za-z0-9+/=]+)/);
+    if (match) {
+        return match[1];
+    }
+    
+    // If it's just a base64 string without the prefix
+    if (/^[A-Za-z0-9+/=]+$/.test(url)) {
+        return `data:audio/mpeg;base64,${url}`;
+    }
+    
+    console.error("Unable to process audio URL:", url.substring(0, 50) + "...");
+    return url;
+}
+
+// Use this in renderDictionaryContent where you extract the audio URL:
+const audioUrl = ensureValidDataUrl(content.match(/\[AUDIO:(.*?)\]/)[1]);

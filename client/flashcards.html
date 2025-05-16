@@ -2,301 +2,139 @@
   // ... (loadDeck, displayFlashcardView, setupAudioButtons, hasValidContent remain largely the same as Phase 2) ...
   // Make sure setupAudioButtons is robust from previous phase.
 
-  /**
-   * Sets up the custom audio play buttons
-   * @param {Element} container - Container element with audio buttons
-   */
-  function setupAudioButtons(container) {
-    console.log('[setupAudioButtons] Attempting to set up for container:', container ? (container.id || container.className || container.tagName) : 'NULL container');
-    if (!container || typeof container.querySelectorAll !== 'function') {
-      console.error('[setupAudioButtons] Invalid container provided:', container);
-      return;
-    }
-
-    const audioButtons = container.querySelectorAll('.audio-play-btn');
-    console.log(`[setupAudioButtons] Found ${audioButtons.length} '.audio-play-btn' elements.`);
-
-    audioButtons.forEach((button, idx) => {
-      const originalButtonId = button.id || `audio-btn-${Date.now()}-${idx}`; 
-      button.id = originalButtonId; 
-      console.log(`[setupAudioButtons] Processing button #${idx + 1} (ID: ${originalButtonId})`);
+  // Update the setupAudioButtons function in your flashcards.js file
+  function setupAudioButtons(containerSelector) {
+      console.log(`[setupAudioButtons] Attempting to set up for container: ${containerSelector}`);
       
-      const audio = button.querySelector('audio.hidden-audio-element'); 
-      
-      if (!audio) {
-        console.error(`[setupAudioButtons] No <audio class="hidden-audio-element"> found as child of button (ID: ${originalButtonId}):`, button);
-        return; 
+      // Find the container
+      const container = document.querySelector(containerSelector);
+      if (!container) {
+          console.error(`[setupAudioButtons] Container '${containerSelector}' not found`);
+          return;
       }
-      console.log(`[setupAudioButtons] Found <audio> element for button (ID: ${originalButtonId}): with src:`, audio.src);
-
-      if (button.dataset.listenerAttached === 'true') {
-        console.warn(`[setupAudioButtons] Listener already attached to button (ID: ${originalButtonId}). Skipping re-attachment.`);
-        return;
-      }
-      button.dataset.listenerAttached = 'true';
-
-      button.addEventListener('click', function(e) {
-        e.stopPropagation(); 
-        console.log(`[AudioButton ${originalButtonId}] Click detected. Audio src:`, audio.src);
-
-        document.querySelectorAll('audio.hidden-audio-element').forEach(otherAudioEl => {
-          if (otherAudioEl !== audio && !otherAudioEl.paused) {
-            console.log(`[AudioButton ${originalButtonId}] Pausing other audio:`, otherAudioEl.src.slice(0,50));
-            otherAudioEl.pause();
-            otherAudioEl.currentTime = 0;
-            const otherButton = otherAudioEl.closest('.audio-play-btn');
-            if (otherButton) {
-              otherButton.classList.remove('playing');
-              const iconEl = otherButton.querySelector('.material-icons');
-              if (iconEl) iconEl.textContent = 'play_arrow';
-            }
-          }
-        });
-        
-        if (audio.paused) {
-          console.log(`[AudioButton ${originalButtonId}] Audio is paused. Attempting to play.`);
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-            playPromise.then(_ => {
-              console.log(`[AudioButton ${originalButtonId}] Playback started successfully.`);
-              button.classList.add('playing');
-              const iconEl = button.querySelector('.material-icons');
-              if (iconEl) iconEl.textContent = 'pause';
-            }).catch(error => {
-              console.error(`[AudioButton ${originalButtonId}] Playback failed for src ${audio.src}:`, error);
-              button.classList.remove('playing');
-              const iconEl = button.querySelector('.material-icons');
-              if (iconEl) iconEl.textContent = 'play_arrow';
-              showError(`Audio playback error: ${error.message}. Check console.`);
-            });
-          }
-        } else {
-          console.log(`[AudioButton ${originalButtonId}] Audio is playing. Attempting to pause.`);
-          audio.pause();
-          button.classList.remove('playing');
-          const iconEl = button.querySelector('.material-icons');
-          if (iconEl) iconEl.textContent = 'play_arrow';
-        }
-      });
       
-      audio.addEventListener('ended', function() {
-        console.log(`[AudioButton ${originalButtonId}] Audio ended for src ${audio.src}.`);
-        button.classList.remove('playing');
-        audio.currentTime = 0; 
-        const iconEl = button.querySelector('.material-icons');
-        if (iconEl) iconEl.textContent = 'play_arrow';
+      // Find all audio buttons within the container
+      const buttons = container.querySelectorAll('.audio-play-btn');
+      console.log(`[setupAudioButtons] Found ${buttons.length} '.audio-play-btn' elements.`);
+      
+      // Attach click event to each button
+      buttons.forEach((button, index) => {
+          console.log(`[setupAudioButtons] Processing button #${index+1} (ID: ${button.id})`);
+          
+          // Find the corresponding audio element
+          const audioElement = button.nextElementSibling;
+          
+          if (!audioElement || audioElement.tagName !== 'AUDIO') {
+              console.error(`[setupAudioButtons] No audio element found for button (ID: ${button.id})`);
+              return;
+          }
+          
+          console.log(`[setupAudioButtons] Found <audio> element for button (ID: ${button.id}): with src: ${audioElement.querySelector('source').src.substring(0, 100)}...`);
+          
+          // Remove any existing event listeners to prevent duplicates
+          button.replaceWith(button.cloneNode(true));
+          const newButton = document.getElementById(button.id);
+          
+          // Add click event listener to play/pause audio
+          newButton.addEventListener('click', function() {
+              console.log(`[AudioButton] Button clicked: ${this.id}`);
+              
+              // Get the audio element again since we replaced the button
+              const audio = this.nextElementSibling;
+              
+              if (audio.paused) {
+                  // Stop all other audio first
+                  document.querySelectorAll('audio').forEach(a => {
+                      if (a !== audio && !a.paused) {
+                          a.pause();
+                          a.currentTime = 0;
+                      }
+                  });
+                  
+                  // Play this audio
+                  audio.play()
+                      .then(() => {
+                          console.log(`[AudioButton] Audio playing for: ${this.id}`);
+                          this.innerHTML = '<i class="fas fa-pause"></i> Pause';
+                      })
+                      .catch(err => {
+                          console.error(`[AudioButton] Error playing audio: ${err.message}`);
+                      });
+              } else {
+                  // Pause this audio
+                  audio.pause();
+                  audio.currentTime = 0;
+                  this.innerHTML = '<i class="fas fa-play"></i> Play Audio';
+                  console.log(`[AudioButton] Audio paused for: ${this.id}`);
+              }
+          });
+          
+          console.log(`[setupAudioButtons] Event listeners attached to button (ID: ${newButton.id}).`);
       });
-
-      audio.addEventListener('error', function(e) {
-        console.error(`[AudioButton ${originalButtonId}] Error on audio element (src ${audio.src}):`, e.target.error);
-        button.classList.remove('playing');
-        const iconEl = button.querySelector('.material-icons');
-        if (iconEl) iconEl.textContent = 'error_outline'; 
-        showError(`Failed to load audio: ${audio.src.substring(0,50)}... Check console.`);
-      });
-      console.log(`[setupAudioButtons] Event listeners attached to button (ID: ${originalButtonId}).`);
-    });
   }
 
-  function displayFlashcard(cards, index) {
-    console.log(`flashcards.html: displayFlashcard - Called for index: ${index}, CardID: ${cards && cards[index] ? (cards[index].id || cards[index].FlashcardID) : 'N/A'}`);
-    
-    if (!cards || index >= cards.length) {
-      console.log('flashcards.html: displayFlashcard - End of deck or invalid card array.');
-      showDeckComplete();
-      return;
-    }
-    
-    const card = cards[index];
-    // console.log('flashcards.html: displayFlashcard - Client received card object (original from server):', JSON.parse(JSON.stringify(card))); // Already logged in Phase 2
-
-    const normalizedCard = {
-      id: card.id || card.FlashcardID,
-      sideA: card.sideA || card.FlashcardSideA,
-      sideB: card.sideB || card.FlashcardSideB,
-      sideC: card.sideC || card.FlashcardSideC,
-      tags: card.tags || card.Tags,
-      StudyConfig: card.StudyConfig 
-    };
-    // console.log('flashcards.html: displayFlashcard - Normalized card properties for display:', JSON.parse(JSON.stringify(normalizedCard))); // Already logged
-
-    const contentArea = document.getElementById('appContent');
-    let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false };
-
-    // console.log(`flashcards.html: displayFlashcard - Raw StudyConfig string for card ${normalizedCard.id}:`, normalizedCard.StudyConfig); // Already logged
-
-    if (normalizedCard.StudyConfig) { // Parsing logic from Phase 2
-      if (typeof normalizedCard.StudyConfig === 'object') {
-        studyConfig = { ...studyConfig, ...normalizedCard.StudyConfig };
-      } else if (typeof normalizedCard.StudyConfig === 'string') {
-        try {
-          if (normalizedCard.StudyConfig.trim().toLowerCase() === 'true') {
-            studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false }; 
-          } else if (normalizedCard.StudyConfig.trim().toLowerCase() === 'false') {
-            studyConfig = { showSideB: false, showSideC: false, autoplayAudio: false };
-          } else {
-            const parsedConfig = JSON.parse(normalizedCard.StudyConfig);
-            studyConfig = { ...studyConfig, ...parsedConfig };
-          }
-        } catch (e) {
-          console.error(`flashcards.html: displayFlashcard - Failed to parse study configuration for card ${normalizedCard.id}:`, e, ". Using defaults.");
-        }
-      }
-    }
-    studyConfig.showSideB = Boolean(studyConfig.showSideB);
-    studyConfig.showSideC = Boolean(studyConfig.showSideC);
-    studyConfig.autoplayAudio = Boolean(studyConfig.autoplayAudio);
-    // console.log(`flashcards.html: displayFlashcard - Client interpreted StudyConfig for card ${normalizedCard.id}:`, studyConfig); // Already logged
-
-    contentArea.innerHTML = `
-      <div class="flashcard-container">
-        <div class="deck-info"><h2>${escapeHtml(window.app.currentDeck)}</h2><div class="progress">Card ${index + 1} of ${cards.length}</div></div>
-        <div class="flashcard" id="currentCard"><div class="flashcard-front"><div class="flashcard-content" id="flashcardSideAContent"></div><div class="flashcard-helper">Click to flip</div></div><div class="flashcard-back"><div class="flashcard-content" id="flashcardSideBContent"></div><div class="flashcard-secondary" id="flashcardSideCContent"></div></div></div>
-        <div class="rating-buttons" style="display: none;" id="ratingButtons"><button class="rating-btn rating-btn-again" data-rating="0"><span class="material-icons">sentiment_very_dissatisfied</span><span>Again</span></button><button class="rating-btn rating-btn-hard" data-rating="1"><span class="material-icons">sentiment_dissatisfied</span><span>Hard</span></button><button class="rating-btn rating-btn-good" data-rating="2"><span class="material-icons">sentiment_satisfied</span><span>Good</span></button><button class="rating-btn rating-btn-easy" data-rating="3"><span class="material-icons">sentiment_very_satisfied</span><span>Easy</span></button></div>
-        <div class="flashcard-controls"><button id="backToDeckListBtn" class="btn btn-outline">Back to Decks</button></div>
-      </div>`;
-    
-    const sideAContentElement = document.getElementById('flashcardSideAContent');
-    if (sideAContentElement) {
-      sideAContentElement.innerHTML = escapeHtml(normalizedCard.sideA || '').replace(/\r\n|\r|\n/g, '<br>');
-    }
-    
-    const sideBhasMediaTag = typeof normalizedCard.sideB === 'string' && (normalizedCard.sideB.includes('[AUDIO:') || normalizedCard.sideB.includes('[IMAGE:'));
-    const sideChasMediaTag = typeof normalizedCard.sideC === 'string' && (normalizedCard.sideC.includes('[AUDIO:') || normalizedCard.sideC.includes('[IMAGE:'));
-
-    let sideBprocessed = !(studyConfig.showSideB && sideBhasMediaTag);
-    let sideCprocessed = !(studyConfig.showSideC && sideChasMediaTag);
-
-    function checkAndSetupAllAudio() {
-      if (sideBprocessed && sideCprocessed) {
-        const flashcardBackElement = document.querySelector('#currentCard .flashcard-back');
-        if (flashcardBackElement) {
-          console.log('[displayFlashcard -> checkAndSetupAllAudio] Both sides processed. Setting up audio buttons.');
-          setupAudioButtons(flashcardBackElement);
-        } else {
-          console.error('[displayFlashcard -> checkAndSetupAllAudio] flashcardBackElement not found.');
-        }
-      }
-    }
-    
-    const sideBContentElement = document.getElementById('flashcardSideBContent');
-    if (sideBContentElement) {
-      if (studyConfig.showSideB) {
-        if (sideBhasMediaTag) {
-          // PHASE 3 LOGGING: Log string being sent to server for Side B
-          console.log(`flashcards.html: displayFlashcard - Side B for card ${normalizedCard.id} has media. Sending to renderDictionaryContent. Content: "${normalizedCard.sideB}"`);
-          google.script.run
-            .withSuccessHandler(function(processedContent) {
-              // PHASE 3 LOGGING: Log HTML received for Side B
-              console.log(`flashcards.html: displayFlashcard -> render Success (Side B) for card ${normalizedCard.id} - Received HTML: "${processedContent.substring(0, 200)}${processedContent.length > 200 ? '...' : ''}"`);
-              sideBContentElement.innerHTML = processedContent;
-              sideBprocessed = true;
-              checkAndSetupAllAudio();
-            })
-            .withFailureHandler(function(err){
-              console.error(`flashcards.html: displayFlashcard - Failed to render Side B dictionary content for card ${normalizedCard.id}:`, err);
-              sideBContentElement.innerHTML = '<p style="color:red">Error loading Side B content.</p>';
-              sideBprocessed = true; 
-              checkAndSetupAllAudio();
-            })
-            .renderDictionaryContent(normalizedCard.sideB);
-        } else if (hasValidContent(normalizedCard.sideB)) {
-          sideBContentElement.innerHTML = escapeHtml(normalizedCard.sideB || '').replace(/\r\n|\r|\n/g, '<br>');
-          // sideBprocessed is already true or will be set if it was false due to logic error
-        } else {
-          sideBContentElement.innerHTML = ''; 
-        }
-      } else {
-        sideBContentElement.innerHTML = '';
-      }
-    } else { sideBprocessed = true; /* If element DNE, consider it processed to not block flow */ }
-
-    const sideCContentElement = document.getElementById('flashcardSideCContent');
-    if (sideCContentElement) {
-      if (studyConfig.showSideC) {
-        if (sideChasMediaTag) {
-          // PHASE 3 LOGGING: Log string being sent to server for Side C
-          console.log(`flashcards.html: displayFlashcard - Side C for card ${normalizedCard.id} has media. Sending to renderDictionaryContent. Content: "${normalizedCard.sideC}"`);
-          google.script.run
-            .withSuccessHandler(function(processedContent) {
-              // PHASE 3 LOGGING: Log HTML received for Side C
-              console.log(`flashcards.html: displayFlashcard -> render Success (Side C) for card ${normalizedCard.id} - Received HTML: "${processedContent.substring(0, 200)}${processedContent.length > 200 ? '...' : ''}"`);
-              sideCContentElement.innerHTML = processedContent;
-              sideCprocessed = true;
-              checkAndSetupAllAudio();
-            })
-            .withFailureHandler(function(err){
-              console.error(`flashcards.html: displayFlashcard - Failed to render Side C dictionary content for card ${normalizedCard.id}:`, err);
-              sideCContentElement.innerHTML = '<p style="color:red">Error loading Side C content.</p>';
-              sideCprocessed = true;
-              checkAndSetupAllAudio();
-            })
-            .renderDictionaryContent(normalizedCard.sideC);
-        } else if (hasValidContent(normalizedCard.sideC)) {
-          sideCContentElement.innerHTML = escapeHtml(normalizedCard.sideC || '').replace(/\r\n|\r|\n/g, '<br>');
-        } else {
-          sideCContentElement.innerHTML = '';
-        }
-      } else {
-        sideCContentElement.innerHTML = '';
-      }
-    } else { sideCprocessed = true; /* If element DNE, consider it processed */ }
-    
-    if (sideBprocessed && sideCprocessed) { // If both were synchronous (no media tags or not shown)
-        console.log('[displayFlashcard] Both Side B and Side C processing were synchronous initially or not needed. Calling checkAndSetupAllAudio.');
-        checkAndSetupAllAudio();
-    }
-    
-    const flashcardElement = document.getElementById('currentCard');
-    if (flashcardElement) {
-      // Event listener for flipping card and handling autoplay
-      flashcardElement.addEventListener('click', function() {
-        const isCurrentlyFlipped = this.classList.contains('flipped');
-        this.classList.toggle('flipped');
-        const ratingButtons = document.getElementById('ratingButtons');
-
-        if (ratingButtons) {
-            if (!isCurrentlyFlipped) { 
-                ratingButtons.style.display = 'flex';
-                if (studyConfig.autoplayAudio) {
-                    // Make sure audio buttons are set up before trying to click
-                    // This relies on checkAndSetupAllAudio having completed
-                    const firstAudioButton = this.querySelector('.flashcard-back .audio-play-btn');
-                    if (firstAudioButton && !firstAudioButton.classList.contains('playing')) {
-                        console.log('[displayFlashcard flip] Autoplaying audio.');
-                        firstAudioButton.click(); 
-                    }
-                }
-            } else { 
-                ratingButtons.style.display = 'none';
-                document.querySelectorAll('#currentCard .flashcard-back audio.hidden-audio-element').forEach(audioEl => {
-                    if (!audioEl.paused) {
-                        audioEl.pause(); audioEl.currentTime = 0;
-                        const button = audioEl.closest('.audio-play-btn');
-                        if (button) {
-                           button.classList.remove('playing');
-                           const iconEl = button.querySelector('.material-icons');
-                           if (iconEl) iconEl.textContent = 'play_arrow';
-                        }
-                    }
-                });
-            }
-        }
+  // Update the displayFlashcard function to better handle media content
+  function displayFlashcard(index, cards) {
+      const card = cards[index];
+      console.log(`flashcards.html: displayFlashcard - Called for index: ${index}, CardID: ${card.FlashcardID}`);
+      
+      // Clear any existing audio elements
+      document.querySelectorAll('audio').forEach(audio => {
+          audio.pause();
+          audio.currentTime = 0;
       });
-    }
-    
-    document.querySelectorAll('.rating-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation(); 
-        const rating = parseInt(this.getAttribute('data-rating'));
-        rateCard(normalizedCard.id, rating, cards, index);
-      });
-    });
-    
-    const backToDeckListButton = document.getElementById('backToDeckListBtn'); 
-    if (backToDeckListButton) {
-        backToDeckListButton.addEventListener('click', loadDeckList);
-    }
+      
+      // Set up the front of the card (Side A)
+      document.getElementById('flashcard-front').innerHTML = `
+          <div class="flashcard-content">
+              <div class="flashcard-text">${card.SideA || ''}</div>
+          </div>
+      `;
+      
+      // Process Side B
+      let sideB = card.SideB || '';
+      let sideBHtml = '';
+      
+      if (sideB.includes('[IMAGE:') || sideB.includes('[AUDIO:')) {
+          console.log(`flashcards.html: displayFlashcard - Side B for card ${card.FlashcardID} has media. Sending to renderDictionaryContent. Content: "${sideB.substring(0, 100)}..."`);
+          sideBHtml = renderDictionaryContent(sideB, 'B');
+          console.log(`flashcards.html: displayFlashcard -> render Success (Side B) for card ${card.FlashcardID} - Received HTML: "${sideBHtml.substring(0, 100)}..."`);
+      } else {
+          sideBHtml = `<div class="flashcard-text">${sideB}</div>`;
+      }
+      
+      // Process Side C
+      let sideC = card.SideC || '';
+      let sideCHtml = '';
+      
+      if (sideC.includes('[IMAGE:') || sideC.includes('[AUDIO:')) {
+          console.log(`flashcards.html: displayFlashcard - Side C for card ${card.FlashcardID} has media. Sending to renderDictionaryContent. Content: "${sideC.substring(0, 100)}..."`);
+          sideCHtml = renderDictionaryContent(sideC, 'C');
+          console.log(`flashcards.html: displayFlashcard -> render Success (Side C) for card ${card.FlashcardID} - Received HTML: "${sideCHtml.substring(0, 100)}..."`);
+      } else {
+          sideCHtml = `<div class="flashcard-text">${sideC}</div>`;
+      }
+      
+      // Set back content
+      document.getElementById('flashcard-back').innerHTML = `
+          <div class="flashcard-content">
+              ${sideBHtml}
+              <div class="side-separator"></div>
+              ${sideCHtml}
+          </div>
+      `;
+      
+      // Set up audio buttons after DOM has been updated
+      console.log("[displayFlashcard -> checkAndSetupAllAudio] Both sides processed. Setting up audio buttons.");
+      setTimeout(() => {
+          setupAudioButtons('#flashcard-back');
+      }, 100);
+      
+      // Show the current card in the counter
+      document.getElementById('card-count').textContent = `Card ${index + 1} of ${cards.length}`;
+      
+      // Update current card index
+      currentCardIndex = index;
   }
   
   // ... (rateCard, showDeckComplete functions remain the same as Phase 2) ...

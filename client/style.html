@@ -797,6 +797,44 @@
       margin-right: 8px;
     }
   }
+  /* Add this to your CSS file or style section */
+  .flashcard-image {
+      display: flex;
+      justify-content: center;
+      margin: 10px 0;
+      width: 100%;
+  }
+
+  .card-media-image {
+      max-width: 90%;
+      max-height: 300px;
+      object-fit: contain;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  }
+
+  .flashcard-audio {
+      display: flex;
+      justify-content: center;
+      margin: 10px 0;
+  }
+
+  .audio-play-btn {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+  }
+
+  .audio-play-btn:hover {
+      background-color: #45a049;
+  }
 
   @media (max-width: 480px) {
     .flashcard-content {
