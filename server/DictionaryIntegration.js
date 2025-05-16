@@ -315,48 +315,56 @@ function addDictionaryContentToCard(deckName, cardId, word) {
     return { success: false, message: `Server error adding multimedia content: ${error.message}` };
   }
 }
+/**
+ * Renders content string with [AUDIO], [IMAGE], and [Source] tags into HTML.
+ * @param {string} contentString - The raw content string from the sheet.
+ * @return {string} HTML string with media tags rendered.
+ */
+function renderDictionaryContent(contentString) {
+  if (!contentString || typeof contentString !== 'string') return '';
 
-function renderDictionaryContent(sideCContent) {
-  if (!sideCContent) return '';
+  // Split the contentString by our custom tags, keeping the tags as delimiters.
+  // This regex looks for [TAG:...] or sequences of characters that are not '[' (plain text).
+  const splitRegex = /(\[AUDIO:[^\]]+\]|\[IMAGE:[^\]]+\]|\[Source:[^\]]+\])/g;
+  const tokens = contentString.split(splitRegex).filter(Boolean); // filter(Boolean) removes empty strings from split
 
-  let processedHtml = escapeHtmlServerSide(sideCContent);
+  let resultHtml = '';
 
-  // Process [AUDIO:...] tags with simplified player
-  const audioPattern = /\[AUDIO:([^\]]+)\]/g;
-  processedHtml = processedHtml.replace(audioPattern, (match, url) => {
-    const unescapedUrl = unescapeHtmlServerSide(url);
-    return `
-      <div class="flashcard-audio">
-        <button class="audio-play-btn" data-audio-url="${unescapedUrl}">
-          <span class="material-icons">play_arrow</span>
-          <audio class="hidden-audio-element" src="${unescapedUrl}" preload="auto"></audio>
-        </button>
-      </div>
-    `;
+  tokens.forEach(token => {
+    if (token.startsWith('[AUDIO:')) {
+      const url = token.substring(7, token.length - 1); // Extract URL
+      // Use escapeHtmlServerSide on URL for security in attributes
+      const safeUrl = escapeHtmlServerSide(url);
+      resultHtml += `
+        <div class="flashcard-audio">
+          <button class="audio-play-btn" data-audio-url="${safeUrl}">
+            <span class="material-icons">play_arrow</span>
+            <audio class="hidden-audio-element" src="${safeUrl}" preload="metadata"></audio>
+          </button>
+        </div>
+      `;
+    } else if (token.startsWith('[IMAGE:')) {
+      const url = token.substring(8, token.length - 1); // Extract URL
+      const safeUrl = escapeHtmlServerSide(url);
+      resultHtml += `
+        <div class="flashcard-image">
+          <img src="${safeUrl}" alt="Illustration" class="centered-card-image">
+        </div>
+      `;
+    } else if (token.startsWith('[Source:')) {
+      const sourceText = token.substring(8, token.length - 1); // Extract source text
+      // Source text is hidden by CSS on the flashcard, but we'll render it sanely anyway.
+      // If it were to be shown, it would be here.
+      // resultHtml += `<span class="source-text">Source: ${escapeHtmlServerSide(sourceText)}</span>`;
+    } else {
+      // This is a plain text segment. Escape it and convert its newlines to <br>.
+      let textSegment = escapeHtmlServerSide(token);
+      textSegment = textSegment.replace(/\r\n|\r|\n/g, '<br>'); // Handle different newline types
+      resultHtml += textSegment;
+    }
   });
 
-  // Process [IMAGE:...] tags with centered image
-  const imagePattern = /\[IMAGE:([^\]]+)\]/g;
-  processedHtml = processedHtml.replace(imagePattern, (match, url) => {
-    const unescapedUrl = unescapeHtmlServerSide(url);
-    return `
-      <div class="flashcard-image">
-        <img src="${unescapedUrl}" alt="Illustration" class="centered-card-image">
-      </div>
-    `;
-  });
-  
-  // Process [Source:...] tags
-  const sourcePattern = /\[Source:([^\]]+)\]/g;
-  processedHtml = processedHtml.replace(sourcePattern, (match, sourceText) => {
-    const unescapedSourceText = unescapeHtmlServerSide(sourceText);
-    return `<span class="source-text">Source: ${unescapedSourceText}</span>`;
-  });
-
-  // Replace newlines with <br> for better display
-  processedHtml = processedHtml.replace(/\n/g, '<br>');
-
-  return processedHtml;
+  return resultHtml;
 }
 
 /**
