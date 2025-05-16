@@ -91,7 +91,7 @@ function createDeck(deckName) {
     const newSheet = ss.insertSheet(cleanDeckName);
     const headers = [
       'FlashcardID', 'FlashcardSideA', 'FlashcardSideB', 'FlashcardSideC',
-      'Tags', 'DateCreated', 'CreatedBy'
+      'Tags', 'DateCreated', 'CreatedBy', 'StudyConfig'
     ];
     newSheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
     headers.forEach((_, i) => newSheet.autoResizeColumn(i + 1));
