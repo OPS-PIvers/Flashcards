@@ -110,12 +110,13 @@ function createDeck(deckName) {
  * Only accessible by admin users.
  *
  * @param {string} deckName - Name of the deck
- * @param {Object} cardData - Card data {sideA, sideB, sideC, tags}
+ * @param {Object} cardData - Card data {sideA, sideB, sideC, tags, showSideB, showSideC, autoplayAudio}
  * @param {string|null} imageUrlToEmbed - URL of the image to embed in Side B
- * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C (Base64 Data URI)
+ * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C
+ * @param {string|null} audioUrlToEmbedSideA - URL of the audio to embed in Side A
  * @return {Object} Result of operation {success: boolean, message: string, cardId?: string}
  */
-function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
+function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed, audioUrlToEmbedSideA) {
   try {
     const session = getUserSession();
     if (!session || !session.userName) {
@@ -129,6 +130,16 @@ function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
 
     if (!cardData || !cardData.sideA || cardData.sideA.trim() === '') {
       return { success: false, message: 'Card Side A is required.' };
+    }
+    
+    // Process Side A content with audio if provided
+    let finalSideA = (cardData.sideA || '').trim();
+    if (audioUrlToEmbedSideA) {
+      const audioTagA = `[AUDIO:${audioUrlToEmbedSideA}]`;
+      // Add audio tag to Side A
+      if (!finalSideA.includes(audioTagA)) {
+        finalSideA = audioTagA + (finalSideA ? ' ' + finalSideA : '');
+      }
     }
     
     let finalSideB = (cardData.sideB || '').trim();
@@ -169,17 +180,22 @@ function addFlashcard(deckName, cardData, imageUrlToEmbed, audioUrlToEmbed) {
     const cardId = `card_${Utilities.getUuid().substring(0, 8)}`;
     const showSideB = cardData.showSideB !== false; // Default to true if not specified
     const showSideC = cardData.showSideC !== false; // Default to true if not specified
-    const studyConfig = JSON.stringify({ showSideB, showSideC });
+    const autoplayAudio = cardData.autoplayAudio === true; // Default to false if not specified
+    const studyConfig = JSON.stringify({ 
+      showSideB, 
+      showSideC, 
+      autoplayAudio 
+    });
 
     const newCardRow = [
       cardId,
-      cardData.sideA.trim(),
+      finalSideA.trim(),
       finalSideB.trim(),
       finalSideC.trim(),
       (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(','),
       new Date(),
       session.userName,
-      studyConfig // Add the new column
+      studyConfig // Add the updated study config
     ];
 
     sheet.appendRow(newCardRow);
@@ -309,12 +325,13 @@ function deleteFlashcard(deckName, cardId) {
  *
  * @param {string} deckName - Name of the deck
  * @param {string} cardId - ID of the flashcard to update
- * @param {Object} cardData - Updated card data {sideA, sideB, sideC, tags}
+ * @param {Object} cardData - Updated card data {sideA, sideB, sideC, tags, showSideB, showSideC, autoplayAudio}
  * @param {string|null} imageUrlToEmbed - URL of the image to embed in Side B
- * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C (Base64 Data URI)
+ * @param {string|null} audioUrlToEmbed - URL of the audio to embed in Side C
+ * @param {string|null} audioUrlToEmbedSideA - URL of the audio to embed in Side A
  * @return {Object} Result of operation {success: boolean, message: string}
  */
-function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlToEmbed) {
+function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlToEmbed, audioUrlToEmbedSideA) {
   try {
     const session = getUserSession();
     if (!session || !session.userName) {
@@ -343,6 +360,7 @@ function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlTo
     const sideBIndex = headers.indexOf('FlashcardSideB');
     const sideCIndex = headers.indexOf('FlashcardSideC');
     const tagsIndex = headers.indexOf('Tags');
+    const studyConfigIndex = headers.indexOf('StudyConfig');
 
     if (idIndex === -1 || sideAIndex === -1 || sideBIndex === -1 || sideCIndex === -1 || tagsIndex === -1) {
       return { success: false, message: 'One or more required columns (FlashcardID, FlashcardSideA, FlashcardSideB, FlashcardSideC, Tags) not found in the deck.' };
@@ -358,6 +376,18 @@ function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlTo
 
     if (rowIndexToUpdate === -1) {
       return { success: false, message: `Card ID "${cardId}" not found in deck "${deckName}" for update.` };
+    }
+
+    // Process Side A with audio if provided
+    let finalSideA = (cardData.sideA || '').trim();
+    if (audioUrlToEmbedSideA) {
+      const audioTagA = `[AUDIO:${audioUrlToEmbedSideA}]`;
+      if (!finalSideA.includes(audioTagA)) {
+        finalSideA = audioTagA + (finalSideA ? ' ' + finalSideA : '');
+      }
+    } else {
+      // Remove any existing audio tags from Side A text
+      finalSideA = finalSideA.replace(/\[AUDIO:[^\]]+\]\s*/gi, '').trim();
     }
 
     let currentSideB = sheet.getRange(rowIndexToUpdate, sideBIndex + 1).getValue() || '';
@@ -400,12 +430,25 @@ function updateFlashcard(deckName, cardId, cardData, imageUrlToEmbed, audioUrlTo
         }
     }
 
-    sheet.getRange(rowIndexToUpdate, sideAIndex + 1).setValue(cardData.sideA.trim());
+    sheet.getRange(rowIndexToUpdate, sideAIndex + 1).setValue(finalSideA.trim());
     sheet.getRange(rowIndexToUpdate, sideBIndex + 1).setValue(finalSideB.trim());
     sheet.getRange(rowIndexToUpdate, sideCIndex + 1).setValue(finalSideC.trim());
     
     const normalizedTags = (cardData.tags || '').trim().split(',').map(tag => tag.trim()).filter(tag => tag).join(',');
     sheet.getRange(rowIndexToUpdate, tagsIndex + 1).setValue(normalizedTags);
+    
+    // Update study configuration
+    if (studyConfigIndex !== -1) {
+      const showSideB = cardData.showSideB !== false;
+      const showSideC = cardData.showSideC !== false;
+      const autoplayAudio = cardData.autoplayAudio === true;
+      const studyConfig = JSON.stringify({
+        showSideB,
+        showSideC,
+        autoplayAudio
+      });
+      sheet.getRange(rowIndexToUpdate, studyConfigIndex + 1).setValue(studyConfig);
+    }
 
     Logger.log(`Admin "${session.userName}" updated card "${cardId}" in deck: ${deckName} with media.`);
     return { success: true, message: 'Flashcard updated successfully.' };

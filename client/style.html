@@ -638,6 +638,74 @@
     .checkbox-item input[type="checkbox"] {
       margin: 0;
     }
+    .centered-card-image {
+      max-width: 100%;
+      max-height: 200px;
+      height: auto;
+      object-fit: contain;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 0 auto;
+      display: block;
+    }
+
+    .audio-play-btn {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 10px auto;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .audio-play-btn:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .audio-play-btn:active {
+      transform: scale(0.95);
+    }
+
+    .audio-play-btn.playing {
+      background-color: var(--secondary-color);
+    }
+
+    .audio-play-btn .material-icons {
+      font-size: 24px;
+    }
+
+    .hidden-audio-element {
+      display: none;
+    }
+
+    .source-text {
+      font-size: 0.75em;
+      color: #6c757d;
+      display: block;
+      text-align: right;
+      margin-top: 5px;
+    }
+
+    /* Flashcard checkbox for autoplay */
+    .flashcard-options {
+      margin: 15px 0;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      margin-right: 8px;
+    }
   }
 
   @media (max-width: 480px) {

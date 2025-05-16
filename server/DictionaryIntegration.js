@@ -316,39 +316,32 @@ function addDictionaryContentToCard(deckName, cardId, word) {
   }
 }
 
-/**
- * Renders multimedia content tags (AUDIO, IMAGE, Source) into HTML for flashcard display.
- *
- * @param {string} sideCContent - The Side C content string containing the tags.
- * @return {string} Processed HTML content.
- */
-function renderDictionaryContent(sideCContent) { // Name kept for client compatibility
+function renderDictionaryContent(sideCContent) {
   if (!sideCContent) return '';
 
   let processedHtml = escapeHtmlServerSide(sideCContent);
 
-  // Process [AUDIO:...] tags
-  // Handles base64 data URIs
+  // Process [AUDIO:...] tags with simplified player
   const audioPattern = /\[AUDIO:([^\]]+)\]/g;
   processedHtml = processedHtml.replace(audioPattern, (match, url) => {
-    const unescapedUrl = unescapeHtmlServerSide(url); // Unescape the URL part
+    const unescapedUrl = unescapeHtmlServerSide(url);
     return `
-      <div class="flashcard-audio" style="margin: 10px 0;">
-        <audio controls style="width:100%;">
-          <source src="${unescapedUrl}" type="audio/mpeg">
-          Your browser does not support audio.
-        </audio>
+      <div class="flashcard-audio">
+        <button class="audio-play-btn" data-audio-url="${unescapedUrl}">
+          <span class="material-icons">play_arrow</span>
+          <audio class="hidden-audio-element" src="${unescapedUrl}" preload="auto"></audio>
+        </button>
       </div>
     `;
   });
 
-  // Process [IMAGE:...] tags
+  // Process [IMAGE:...] tags with centered image
   const imagePattern = /\[IMAGE:([^\]]+)\]/g;
   processedHtml = processedHtml.replace(imagePattern, (match, url) => {
-    const unescapedUrl = unescapeHtmlServerSide(url); // Unescape the URL part
+    const unescapedUrl = unescapeHtmlServerSide(url);
     return `
-      <div class="flashcard-image" style="margin: 10px 0; text-align: center;">
-        <img src="${unescapedUrl}" alt="Illustration" style="max-width: 100%; max-height: 200px; height: auto; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;">
+      <div class="flashcard-image">
+        <img src="${unescapedUrl}" alt="Illustration" class="centered-card-image">
       </div>
     `;
   });
@@ -356,11 +349,11 @@ function renderDictionaryContent(sideCContent) { // Name kept for client compati
   // Process [Source:...] tags
   const sourcePattern = /\[Source:([^\]]+)\]/g;
   processedHtml = processedHtml.replace(sourcePattern, (match, sourceText) => {
-      const unescapedSourceText = unescapeHtmlServerSide(sourceText);
-      return `<span style="font-size: 0.75em; color: #6c757d; display: block; text-align: right; margin-top: 5px;">Source: ${unescapedSourceText}</span>`;
+    const unescapedSourceText = unescapeHtmlServerSide(sourceText);
+    return `<span class="source-text">Source: ${unescapedSourceText}</span>`;
   });
 
-  // Replace newlines with <br> for better display of multi-tag content
+  // Replace newlines with <br> for better display
   processedHtml = processedHtml.replace(/\n/g, '<br>');
 
   return processedHtml;
