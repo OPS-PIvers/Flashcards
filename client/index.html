@@ -31,11 +31,11 @@
         <div class="app-title">
           <h1>Flashcard App</h1>
         </div>
-        <div class="user-info" id="userInfo" style="display: <?= data.isLoggedIn ? 'flex' : 'none' ?>;">
+        <div class="user-info" id="userInfo" style="display: <?= data.isLoggedIn === 'true' ? 'flex' : 'none' ?>;">
           <span>Welcome, <?= data.userName ?></span>
           <button id="logoutBtn" class="btn-text">Logout</button>
           <!-- Admin Panel button is always rendered if logged in, visibility controlled by data.isAdmin and JS -->
-          <button id="adminPanelBtn" class="btn-text" style="display: <?= data.isAdmin ? 'block' : 'none' ?>;">Admin Panel</button>
+          <button id="adminPanelBtn" class="btn-text" style="display: <?= data.isAdmin === 'true' ? 'block' : 'none' ?>;">Admin Panel</button>
         </div>
       </header>
 
@@ -60,8 +60,8 @@
         // The loading indicator is initially hidden.
         // initApp will call functions that use show/hideLoadingIndicator.
         initApp({
-          isLoggedIn: <?= data.isLoggedIn ? 'true' : 'false' ?>,
-          isAdmin: <?= data.isAdmin ? 'true' : 'false' ?>,
+          isLoggedIn: <?= data.isLoggedIn ?>,
+          isAdmin: <?= data.isAdmin ?>,
           userName: "<?= data.userName || '' ?>",
           initialPage: "<?= data.page ?>"
         });

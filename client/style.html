@@ -292,43 +292,84 @@
     transform: rotateY(180deg);
     display: flex;
     flex-direction: column;
-    /* justify-content: space-between; /* We'll let flex-grow handle distribution */
-    padding: var(--spacing-sm); /* Keep padding minimal */
-    height: 100%; /* Crucial: make flashcard-back fill the .flashcard height */
+    justify-content: flex-start;
+    padding: var(--spacing-md);
+    height: 100%;
     box-sizing: border-box;
+    overflow: hidden;
+    backface-visibility: hidden;
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
   }
 
-  .flashcard-back .flashcard-content { /* This holds the image/text for Side B */
-    flex-grow: 1; /* Allow this to take most of the space */
-    display: flex; /* To manage its children, e.g., .flashcard-image */
-    align-items: center; /* Vertically center content like text or the image container */
-    justify-content: center; /* Horizontally center content */
-    min-height: 0; /* ESSENTIAL for flex children to shrink and not overflow parent */
-    overflow: hidden; /* Prevent children from visually spilling out */
+  .flashcard-back .flashcard-content {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: auto;
+    width: 100%;
+    margin-bottom: var(--spacing-sm);
+    box-sizing: border-box;
+    max-height: 65%;
+  }
+
+  .flashcard-back .flashcard-secondary {
+    flex: 0 0 auto;
+    padding-top: var(--spacing-sm);
+    overflow-y: auto;
+    max-height: 35%;
     width: 100%;
     box-sizing: border-box;
-    /* border: 1px dashed red; /* For debugging */
+    border-top: 1px solid var(--divider-color);
   }
 
-  .flashcard-back .flashcard-secondary { /* For Side C content */
-    flex-shrink: 0; /* Prevent it from shrinking if Side B content is large */
-    padding-top: var(--spacing-xs);
-    overflow-y: auto; /* Allow scrolling only for this part if it's long */
-    max-height: 30%; /* Example: Limit height of Side C to 30% of flashcard-back */
+  .flashcard-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
-    box-sizing: border-box;
-    /* border: 1px dashed blue; /* For debugging */
+    height: auto;
+    max-height: 200px;
+    margin-bottom: var(--spacing-sm);
   }
 
-  .flashcard-content {
-    font-size: 1.5rem;
-    font-weight: 400;
+  .centered-card-image {
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+    object-fit: contain;
+    border: 1px solid var(--divider-color);
+    border-radius: var(--card-radius);
   }
 
-  .flashcard-secondary {
-    font-size: 1rem;
-    margin-top: var(--spacing-md);
-    color: var(--text-secondary);
+  .audio-play-btn {
+    background-color: rgba(0, 0, 0, 0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    margin: var(--spacing-xs);
+    transition: background-color 0.2s, transform 0.1s;
+    z-index: 10;
+  }
+
+  .audio-play-btn:hover {
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .audio-play-btn.playing {
+    background-color: var(--secondary-color);
   }
 
   .flashcard-controls {

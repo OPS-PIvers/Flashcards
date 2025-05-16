@@ -382,19 +382,14 @@ function renderDictionaryContent(contentString) {
   return resultHtml;
 }
 
-/**
- * Server-side HTML escaping function.
- * @param {string} str - The string to escape.
- * @return {string} The escaped string.
- */
 function escapeHtmlServerSide(str) {
   if (typeof str !== 'string') return '';
   return str
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
-    .replace(/&/g, '&'); // Ampersand must be last
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**

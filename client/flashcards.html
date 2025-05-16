@@ -189,13 +189,24 @@
    * @return {boolean} True if content has valid displayable content
    */
   function hasValidContent(content) {
-    if (!content) return false;
-    if (typeof content !== 'string') return false;
+    // Basic nullish checks
+    if (content === null || content === undefined) return false;
     
-    if (!content.includes('[IMAGE:') && !content.includes('[AUDIO:') && content.trim() === '') {
+    // Type check
+    if (typeof content !== 'string') {
+      console.log('[hasValidContent] Content is not a string:', typeof content);
       return false;
     }
     
+    // Trim the content
+    const trimmedContent = content.trim();
+    
+    // Check for empty content, but allow it if it contains media tags
+    if (trimmedContent === '') {
+      return content.includes('[IMAGE:') || content.includes('[AUDIO:');
+    }
+    
+    // Non-empty content is always valid
     return true;
   }
   
@@ -230,15 +241,53 @@
 
     const contentArea = document.getElementById('appContent');
     
+    // Enhanced StudyConfig parsing with better defaults and error handling
     let studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false };
+
+    console.log('[displayFlashcard] Processing StudyConfig for card:', normalizedCard.id || 'unknown');
+    console.log('[displayFlashcard] Raw StudyConfig:', normalizedCard.StudyConfig);
+
+    // Ensure string format for parsing
     if (normalizedCard.StudyConfig) {
-      try {
-        const parsedConfig = JSON.parse(normalizedCard.StudyConfig);
-        studyConfig = { ...studyConfig, ...parsedConfig };
-      } catch (e) {
-        console.error('[displayFlashcard] Failed to parse study configuration:', e, "Raw config:", normalizedCard.StudyConfig);
+      if (typeof normalizedCard.StudyConfig === 'object') {
+        console.log('[displayFlashcard] StudyConfig is already an object:', normalizedCard.StudyConfig);
+        studyConfig = { ...studyConfig, ...normalizedCard.StudyConfig };
+      } else if (typeof normalizedCard.StudyConfig === 'string') {
+        try {
+          // Handle potential non-JSON strings that might be "true" or "false"
+          if (normalizedCard.StudyConfig.trim().toLowerCase() === 'true') {
+            studyConfig = { showSideB: true, showSideC: true, autoplayAudio: false };
+          } else if (normalizedCard.StudyConfig.trim().toLowerCase() === 'false') {
+            studyConfig = { showSideB: false, showSideC: false, autoplayAudio: false };
+          } else {
+            // Normal JSON parsing
+            const parsedConfig = JSON.parse(normalizedCard.StudyConfig);
+            studyConfig = { ...studyConfig, ...parsedConfig };
+          }
+        } catch (e) {
+          console.error('[displayFlashcard] Failed to parse study configuration:', e, "Raw config:", normalizedCard.StudyConfig);
+        }
       }
     }
+
+    // Ensure boolean values
+    studyConfig.showSideB = Boolean(studyConfig.showSideB);
+    studyConfig.showSideC = Boolean(studyConfig.showSideC);
+    studyConfig.autoplayAudio = Boolean(studyConfig.autoplayAudio);
+
+    // Better content detection logic
+    // Your existing content detection logic
+    let sideBneedsProcessing = studyConfig.showSideB && 
+                            normalizedCard.sideB && 
+                            typeof normalizedCard.sideB === 'string' &&
+                            (normalizedCard.sideB.includes('[AUDIO:') || normalizedCard.sideB.includes('[IMAGE:'));
+
+    let sideCneedsProcessing = studyConfig.showSideC && 
+                            normalizedCard.sideC && 
+                            typeof normalizedCard.sideC === 'string' &&
+                            (normalizedCard.sideC.includes('[AUDIO:') || normalizedCard.sideC.includes('[IMAGE:'));
+
+    console.log('[displayFlashcard] Content processing needed - SideB:', sideBneedsProcessing, 'SideC:', sideCneedsProcessing);
     
     contentArea.innerHTML = `
       <div class="flashcard-container">
@@ -253,8 +302,8 @@
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            <div class="flashcard-content" id="flashcardSideBContent">FORCE TEST: ${escapeHtml(normalizedCard.sideB || '')}</div>
-            <div class="flashcard-secondary" id="flashcardSideCContent">FORCE TEST: ${escapeHtml(normalizedCard.sideC || '')}</div>
+            <div class="flashcard-content" id="flashcardSideBContent"></div>
+            <div class="flashcard-secondary" id="flashcardSideCContent"></div>
           </div>
         </div>
         
