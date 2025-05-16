@@ -217,15 +217,25 @@
     
     const card = cards[index];
     console.log('[displayFlashcard] Current card object:', JSON.parse(JSON.stringify(card))); // Deep copy for logging to avoid later modifications affecting log
-    console.log('[displayFlashcard] card.FlashcardSideA:', card.FlashcardSideA, '(type: ' + typeof card.FlashcardSideA + ')');
-    console.log('[displayFlashcard] card.FlashcardSideB:', card.FlashcardSideB, '(type: ' + typeof card.FlashcardSideB + ')');
-    console.log('[displayFlashcard] card.FlashcardSideC:', card.FlashcardSideC, '(type: ' + typeof card.FlashcardSideC + ')');
-    console.log('[displayFlashcard] card.id (should be FlashcardID):', card.id, '(type: ' + typeof card.id + ')');
+    
+    // Normalize card properties to handle both naming conventions
+    const normalizedCard = {
+      ...card,
+      FlashcardSideA: card.FlashcardSideA || card.sideA || '',
+      FlashcardSideB: card.FlashcardSideB || card.sideB || '',
+      FlashcardSideC: card.FlashcardSideC || card.sideC || ''
+    };
+    
+    console.log('[displayFlashcard] Normalized card properties:', {
+      sideA: normalizedCard.FlashcardSideA,
+      sideB: normalizedCard.FlashcardSideB,
+      sideC: normalizedCard.FlashcardSideC
+    });
 
     const contentArea = document.getElementById('appContent');
     
     // Process dictionary content in FlashcardSideC if present
-    let sideCContent = card.FlashcardSideC || '';
+    let sideCContent = normalizedCard.FlashcardSideC || '';
     console.log('[displayFlashcard] Initial sideCContent for display:', sideCContent);
     
     // Parse study configuration
@@ -248,13 +258,13 @@
         
         <div class="flashcard" id="currentCard">
           <div class="flashcard-front">
-            <div class="flashcard-content">${escapeHtml(card.FlashcardSideA)}</div>
+            <div class="flashcard-content">${escapeHtml(normalizedCard.FlashcardSideA)}</div>
             <div class="flashcard-helper">Click to flip</div>
           </div>
           <div class="flashcard-back">
-            ${(studyConfig.showSideB && hasValidContent(card.FlashcardSideB)) ? 
-              `<div class="flashcard-content">${escapeHtml(card.FlashcardSideB)}</div>` : ''}
-            ${(studyConfig.showSideC && hasValidContent(card.FlashcardSideC)) ? 
+            ${(studyConfig.showSideB && hasValidContent(normalizedCard.FlashcardSideB)) ? 
+              `<div class="flashcard-content">${escapeHtml(normalizedCard.FlashcardSideB)}</div>` : ''}
+            ${(studyConfig.showSideC && hasValidContent(normalizedCard.FlashcardSideC)) ? 
               `<div class="flashcard-secondary" id="flashcardSideCContent">${escapeHtml(sideCContent)}</div>` : ''}
           </div>
         </div>
@@ -285,13 +295,13 @@
     `;
     
     // Process dictionary content in both Side B and Side C if present
-    if ((card.FlashcardSideB && (card.FlashcardSideB.includes('[AUDIO:') || card.FlashcardSideB.includes('[IMAGE:'))) ||
-        (card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:')))) {
+    if ((normalizedCard.FlashcardSideB && (normalizedCard.FlashcardSideB.includes('[AUDIO:') || normalizedCard.FlashcardSideB.includes('[IMAGE:'))) ||
+        (normalizedCard.FlashcardSideC && (normalizedCard.FlashcardSideC.includes('[AUDIO:') || normalizedCard.FlashcardSideC.includes('[IMAGE:')))) {
       
       console.log('[displayFlashcard] Dictionary content found in flashcard sides. Processing content.');
       
       // Process Side B content
-      if (studyConfig.showSideB && card.FlashcardSideB && (card.FlashcardSideB.includes('[AUDIO:') || card.FlashcardSideB.includes('[IMAGE:'))) {
+      if (studyConfig.showSideB && normalizedCard.FlashcardSideB && (normalizedCard.FlashcardSideB.includes('[AUDIO:') || normalizedCard.FlashcardSideB.includes('[IMAGE:'))) {
         google.script.run
           .withSuccessHandler(function(processedContent) {
             console.log('[displayFlashcard] renderDictionaryContent success for Side B:', processedContent);
@@ -304,11 +314,11 @@
           .withFailureHandler(function(err){
             console.error("[displayFlashcard] Failed to render Side B dictionary content:", err);
           })
-          .renderDictionaryContent(card.FlashcardSideB);
+          .renderDictionaryContent(normalizedCard.FlashcardSideB);
       }
       
       // Process Side C content
-      if (studyConfig.showSideC && card.FlashcardSideC && (card.FlashcardSideC.includes('[AUDIO:') || card.FlashcardSideC.includes('[IMAGE:'))) {
+      if (studyConfig.showSideC && normalizedCard.FlashcardSideC && (normalizedCard.FlashcardSideC.includes('[AUDIO:') || normalizedCard.FlashcardSideC.includes('[IMAGE:'))) {
         google.script.run
           .withSuccessHandler(function(processedContent) {
             console.log('[displayFlashcard] renderDictionaryContent success for Side C:', processedContent);
@@ -321,7 +331,7 @@
           .withFailureHandler(function(err){
             console.error("[displayFlashcard] Failed to render Side C dictionary content:", err);
           })
-          .renderDictionaryContent(card.FlashcardSideC);
+          .renderDictionaryContent(normalizedCard.FlashcardSideC);
       }
     }
     
