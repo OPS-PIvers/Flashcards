@@ -371,6 +371,7 @@ function escapeHtmlServerSide(str) {
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/"/g, '"')
+    .replace(/'/g, '&#39;'); // Added apostrophe escaping
 }
 
 /**
@@ -381,11 +382,11 @@ function escapeHtmlServerSide(str) {
 function unescapeHtmlServerSide(str) {
   if (typeof str !== 'string') return '';
   return str
-    .replace(/&/g, '&')
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/"/g, '"')
-    .replace(/'/g, "'");
+    .replace(/'/g, "'")
+    .replace(/&/g, '&'); // Ampersand must be last
 }
 
 /**
