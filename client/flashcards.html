@@ -182,12 +182,6 @@
     });
   }
   
-  /**
-   * Helper function to check if content has valid displayable content
-   * 
-   * @param {string} content - Content to check
-   * @return {boolean} True if content has valid displayable content
-   */
   function hasValidContent(content) {
     // Basic nullish checks
     if (content === null || content === undefined) return false;
@@ -270,10 +264,15 @@
       }
     }
 
+    console.log('[displayFlashcard] Processing StudyConfig for card:', normalizedCard.id || 'unknown');
+    console.log('[displayFlashcard] Raw StudyConfig:', normalizedCard.StudyConfig);
+
     // Ensure boolean values
     studyConfig.showSideB = Boolean(studyConfig.showSideB);
     studyConfig.showSideC = Boolean(studyConfig.showSideC);
     studyConfig.autoplayAudio = Boolean(studyConfig.autoplayAudio);
+
+    console.log('[displayFlashcard] Final StudyConfig:', JSON.stringify(studyConfig));
 
     // Better content detection logic
     // Your existing content detection logic
