@@ -123,22 +123,76 @@
         return;
     }
     decksTabContent.innerHTML = `
-        <div class="card">
-            <div class="card-title">Create New Deck</div>
-            <div class="form-group">
-                <label for="newDeckName" class="form-label">Deck Name</label>
-                <div class="input-with-button">
-                    <input type="text" id="newDeckName" class="form-control" placeholder="Enter deck name">
-                    <button id="createDeckBtn" class="btn">Create</button>
-                </div>
-            </div>
+      <div class="card">
+        <div class="card-title">Editing Deck: ${escapeHtml(deckName)}</div>
+        <div class="form-actions">
+          <button id="backToAdminDecks" class="btn btn-outline">Back to Decks</button>
+          <button id="showAddCardFormBtn" class="btn">Add New Card</button>
         </div>
-        <div class="card">
-            <div class="card-title">Manage Decks</div>
-            <div id="adminDeckListContainer" class="admin-deck-list">
-                <p>Loading decks...</p>
+        <div id="addCardFormContainer" style="display: none; margin-top: 20px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
+          <h3>Add New Card</h3>
+          <div class="form-group">
+            <label for="newCardSideA" class="form-label">Side A (Question/Word)</label>
+            <div class="input-with-button">
+              <input type="text" id="newCardSideA" class="form-control" required>
+              <button id="getAudioBtnA" class="btn btn-sm">Get Audio</button>
             </div>
+            <div id="audioPreviewContainerA" class="preview-container" style="display: none; margin-top: 10px;">
+              <audio id="audioPreviewA" controls style="width: 100%;"></audio>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="newCardSideB" class="form-label">Side B (Answer/Text)</label>
+            <div class="input-with-button">
+              <input type="text" id="newCardSideB" class="form-control"> <!-- Allow empty if image is primary -->
+              <button id="getImageBtn" class="btn btn-sm">Get Image</button>
+            </div>
+            <div id="imagePreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
+              <img id="imagePreview" style="max-width: 100%; max-height: 150px; object-fit: contain;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="newCardSideC" class="form-label">Side C (Additional Info/Text)</label>
+            <div class="input-with-button">
+              <textarea id="newCardSideC" class="form-control" rows="3"></textarea>
+              <button id="getAudioBtn" class="btn btn-sm">Get Audio</button>
+            </div>
+            <div id="audioPreviewContainer" class="preview-container" style="display: none; margin-top: 10px;">
+              <audio id="audioPreview" controls style="width: 100%;"></audio>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="newCardTags" class="form-label">Tags (comma-separated)</label>
+            <input type="text" id="newCardTags" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Study Configuration</label>
+            <div class="checkbox-group">
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideA" checked disabled> 
+                <label for="studySideA">Side A (Always shown on front)</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideB" checked> 
+                <label for="studySideB">Show Side B on back</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studySideC" checked> 
+                <label for="studySideC">Show Side C on back</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="studyAutoplay" checked> 
+                <label for="studyAutoplay">Auto-play audio when card is flipped</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button id="submitNewCardBtn" class="btn btn-secondary">Save Card</button>
+            <button id="cancelAddCardBtn" class="btn btn-outline">Cancel</button>
+          </div>
         </div>
+        <div class="admin-card-list" id="cardListDisplay">${cardListHtml}</div>
+      </div>
     `;
     const createDeckBtn = document.getElementById('createDeckBtn');
     if (createDeckBtn) {
