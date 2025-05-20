@@ -1,0 +1,29 @@
+name: Deploy to Google Apps Script
+
+on:
+  push:
+    branches: [ main ]  # Or whatever branch you want to trigger on
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm install -g @google/clasp
+          
+      - name: Authenticate with Google
+        run: |
+          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+          
+      - name: Push to Google Apps Script
+        run: clasp push -f
+        
+      - name: Update deployment
+        run: clasp deploy -i ${{ secrets.DEPLOYMENT_ID }} -d "Automated deployment from GitHub"
