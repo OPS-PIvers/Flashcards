@@ -67,7 +67,7 @@ function saveFlashcards(flashcards) {
   return true;
 }
 
-// Load flashcards from user properties
+// Load flashcards from user properties (server-side storage)
 function loadFlashcards() {
   const savedData = PropertiesService.getUserProperties().getProperty('savedFlashcards');
   if (savedData) {
