@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashcard App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Nunito', 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #6e8efb, #a777e3, #ff8886);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+    }
+
+    @keyframes gradientBG {
+      0% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      padding: 20px;
+    }
+
+    .flashcard-container {
+      perspective: 1000px;
+      margin-bottom: 20px;
+    }
+
+    .flashcard {
+      width: 100%;
+      height: 300px;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+      border-radius: 16px;
+    }
+
+    .flashcard.flipped {
+      transform: rotateY(180deg);
+    }
+
+    .front, .back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center; /* Center content horizontally */
+      padding: 20px;
+      box-sizing: border-box;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.17);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .front {
+      z-index: 2;
+      justify-content: space-between; /* Push word and button apart */
+    }
+
+    .back {
+      transform: rotateY(180deg);
+      justify-content: flex-start; /* Align items to start, use flex-grow and margins for spacing */
+    }
+
+    .word {
+      font-size: 4.5rem; /* Increased size */
+      font-weight: bold;
+      text-align: center;
+      color: #333;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+      flex-grow: 1; /* Allow word to take available vertical space */
+      display: flex; /* For vertical centering of text itself if it wraps */
+      align-items: center; /* Vertically center text */
+      justify-content: center; /* Horizontally center text */
+      width: 100%; /* Ensure it uses full width for centering */
+      margin-bottom: 0; /* Removed original margin, space-between on .front handles it */
+      overflow-wrap: break-word; /* Prevent long words from overflowing card badly */
+      word-break: break-word;
+      hyphens: auto;
+    }
+
+    .audio-btn {
+      background: linear-gradient(145deg, #4CAF50, #45a049);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 55px;
+      height: 55px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      font-size: 1.5rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      flex-shrink: 0; /* Prevent button from shrinking */
+    }
+
+    .audio-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #45a049, #3d9042);
+    }
+
+    .audio-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .audio-icon {
+      pointer-events: none;
+    }
+
+    .image-container {
+      width: 100%; /* Use full width of padded card */
+      flex-grow: 1; /* Make image container take available vertical space */
+      min-height: 0; /* Important for flex item sizing, prevents overflow */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 15px; /* Space between image and controls */
+      overflow: hidden;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .image-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      transition: transform 0.5s ease;
+    }
+
+    .image-container:hover img {
+      transform: scale(1.03);
+    }
+
+    .speech-container, .typing-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 10px; /* Space before attribution */
+      flex-shrink: 0; /* Prevent controls from shrinking too much */
+    }
+
+    .mic-btn {
+      background: linear-gradient(145deg, #2196F3, #1e88e5);
+      color: white;
+      border: none;
+      border-radius: 25px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .mic-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #1e88e5, #1976d2);
+    }
+
+    .mic-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .mic-btn:disabled {
+      background: linear-gradient(145deg, #b0bec5, #90a4ae);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .speech-result {
+      margin-top: 12px;
+      font-size: 1rem;
+      text-align: center;
+      min-height: 24px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background-color: rgba(255, 255, 255, 0.7);
+      transition: all 0.3s ease;
+      width: 90%; /* Ensure it doesn't get too wide */
+    }
+    
+    .typing-input {
+      width: 90%;
+      padding: 12px 15px;
+      font-size: 1.1rem;
+      border: 2px solid rgba(33, 150, 243, 0.5);
+      border-radius: 8px;
+      background-color: rgba(255, 255, 255, 0.9);
+      transition: all 0.3s ease;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .typing-input:focus {
+      outline: none;
+      border-color: #2196F3;
+      box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.25);
+    }
+    
+    .submit-btn {
+      background: linear-gradient(145deg, #4CAF50, #45a049);
+      color: white;
+      border: none;
+      border-radius: 25px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #45a049, #3d9042);
+    }
+    
+    .submit-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .toggle-container { /* This style applies to the toggle BELOW the card */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 15px auto;
+      gap: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px 15px;
+      border-radius: 30px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      max-width: fit-content;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .toggle-label {
+      font-size: 0.9rem;
+      color: white;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 30px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.5);
+      transition: .4s;
+      border-radius: 34px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 4px;
+      bottom: 4px;
+      background: linear-gradient(145deg, #2196F3, #1e88e5);
+      transition: .4s;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    input:checked + .slider {
+      background-color: rgba(255, 255, 255, 0.5);
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(30px);
+      background: linear-gradient(145deg, #4CAF50, #45a049);
+    }
+    
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .nav-btn, .flip-btn {
+      flex: 1;
+      padding: 14px 20px;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .nav-btn {
+      background: linear-gradient(145deg, #5c6bc0, #3f51b5);
+    }
+
+    .nav-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #3f51b5, #303f9f);
+    }
+
+    .nav-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .flip-btn {
+      background: linear-gradient(145deg, #ff9800, #f57c00);
+    }
+
+    .flip-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #f57c00, #ef6c00);
+    }
+
+    .flip-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .progress {
+      text-align: center;
+      font-size: 1rem;
+      color: white;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 20px;
+      padding: 8px 16px;
+      display: block; /* For margin auto to work */
+      width: fit-content; /* Shrink to content */
+      margin-left: auto;
+      margin-right: auto;
+      margin-bottom: 15px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .notice {
+      background-color: rgba(255, 243, 205, 0.9);
+      color: #856404;
+      padding: 12px;
+      border-radius: 10px;
+      margin-top: 15px;
+      font-size: 0.95rem;
+      text-align: center;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .settings-panel {
+      margin-top: 20px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.17);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .settings-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      font-size: 1.2rem;
+      color: #333;
+      text-align: center;
+    }
+
+    .flashcard-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .form-input {
+      padding: 12px;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 0 3px rgba(76, 175, 80, 0.2);
+    }
+
+    .add-btn {
+      padding: 12px;
+      background: linear-gradient(145deg, #4CAF50, #45a049);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .add-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      background: linear-gradient(145deg, #45a049, #3d9042);
+    }
+
+    .add-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .back .attribution {
+        font-size: 0.8rem;
+        text-align: center;
+        width: 100%; 
+        margin-top: auto; 
+        padding-top: 5px; 
+        color: #555; 
+        text-shadow: none; 
+        flex-shrink: 0; 
+    }
+    .back .attribution a {
+        color: #3f51b5; 
+        text-decoration: underline;
+    }
+
+    .attribution { 
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.9);
+      text-align: center;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    .attribution a {
+      color: white; 
+      text-decoration: underline;
+    }
+
+
+    @media (max-width: 600px) {
+      .flashcard {
+        height: 280px; 
+      }
+      
+      .word {
+        font-size: 3.5rem; 
+      }
+      
+      .controls {
+        flex-direction: row;
+      }
+      .image-container {
+        margin-bottom: 10px; 
+      }
+      .speech-container, .typing-container {
+        margin-bottom: 5px; 
+      }
+      .back .attribution {
+        font-size: 0.7rem; 
+        padding-top: 2px;
+      }
+      .mic-btn, .submit-btn {
+        padding: 10px 18px; 
+        font-size: 0.9rem;
+      }
+      .typing-input {
+        font-size: 1rem;
+        padding: 10px 12px;
+      }
+      .speech-result {
+        font-size: 0.9rem;
+        margin-top: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="flashcard-container">
+      <div class="flashcard" id="flashcard">
+        <div class="front">
+          <div class="word" id="wordDisplay"></div>
+          <button class="audio-btn" id="playAudioBtn" aria-label="Play pronunciation">
+            <i class="audio-icon">🔊</i>
+          </button>
+        </div>
+        <div class="back">
+          <div class="image-container">
+            <img id="imageDisplay" src="" alt="Flashcard image">
+          </div>
+          <div class="speech-container" id="speechContainer">
+            <button class="mic-btn" id="startSpeechBtn">
+              <i class="mic-icon">🎤</i> Say it
+            </button>
+            <div id="speechResult" class="speech-result"></div>
+          </div>
+          <div class="typing-container" id="typingContainer" style="display: none;">
+            <input type="text" id="typingInput" class="typing-input" placeholder="Type the word...">
+            <button id="submitTypingBtn" class="submit-btn">Check <i>✓</i></button>
+            <div id="typingResult" class="speech-result"></div>
+          </div>
+          <div class="attribution" id="attribution"></div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="prevBtn" class="nav-btn">Previous</button>
+      <button id="flipBtn" class="flip-btn">Flip</button>
+      <button id="nextBtn" class="nav-btn">Next</button>
+    </div>
+    
+    <div class="toggle-container">
+      <span class="toggle-label">Speech</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="modeToggle">
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Typing</span>
+    </div>
+    
+    <div class="progress">
+      <span id="currentCardIndex">1</span>/<span id="totalCards">5</span>
+    </div>
+    
+    <div id="micPermissionNotice" class="notice" style="display: none;">
+      <strong>⚠️ Microphone access is needed for speech recognition.</strong><br>
+      Please allow microphone access when prompted.
+    </div>
+    
+    <div class="settings-panel">
+      <div class="settings-title">Add New Flashcard</div>
+      <div class="flashcard-form">
+        <input type="text" id="newWord" class="form-input" placeholder="Enter word">
+        <button id="addCardBtn" class="add-btn">Add Card <span id="loading" class="loading" style="display: none;"></span></button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    let flashcards = []; 
+    let currentIndex = 0;
+    let synth = window.speechSynthesis;
+    let recognition;
+
+    if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+      console.log("Setting up mock google.script.run for local development.");
+      window.google = {
+        script: {
+          run: {
+            _successHandler: null,
+            _failureHandler: null,
+            withSuccessHandler: function(handler) {
+              this._successHandler = handler;
+              return this;
+            },
+            withFailureHandler: function(handler) {
+              this._failureHandler = handler;
+              return this;
+            },
+            loadFlashcards: function() {
+              console.log("Mock: loadFlashcards called");
+              const mockData = [
+                { word: "Apple", image: "https://images.pexels.com/photos/102104/pexels-photo-102104.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" },
+                { word: "Banana", image: "https://images.pexels.com/photos/2280977/pexels-photo-2280977.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" },
+                { word: "Cat", image: "https://images.pexels.com/photos/45201/kitty-cat-kitten-pet-45201.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" },
+                { word: "Dog", image: "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" },
+                { word: "Elephant", image: "https://images.pexels.com/photos/66898/elephant-cub-tsavo-kenya-66898.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" }
+              ];
+              if (this._successHandler) {
+                setTimeout(() => this._successHandler(mockData), 200);
+              } else { console.error("Mock: No success handler for loadFlashcards");}
+            },
+            saveFlashcards: function(cards) {
+                console.log("Mock: saveFlashcards called with:", cards);
+                if (this._successHandler) { setTimeout(() => this._successHandler(), 100); }
+            },
+            searchPexelsImage: function(word) {
+                console.log("Mock: searchPexelsImage called for:", word);
+                if (this._successHandler) {
+                    setTimeout(() => this._successHandler({ success: true, imageUrl: 'https://via.placeholder.com/400x300.png?text=' + encodeURIComponent(word) }), 500);
+                } else { console.error("Mock: No success handler for searchPexelsImage");}
+            }
+          }
+        }
+      };
+    }
+    
+    google.script.run
+      .withSuccessHandler(function(data) {
+        flashcards = data || []; 
+        if (flashcards.length > 0) {
+            initializeApp();
+        } else {
+            handleNoFlashcards();
+        }
+      })
+      .withFailureHandler(function(err) {
+          console.error("Failed to load flashcards:", err);
+          handleNoFlashcards("Error loading cards. Please try again.");
+      })
+      .loadFlashcards();
+
+    function handleNoFlashcards(message) {
+        if (message === undefined) {
+          message = "No flashcards available. Add some!";
+        }
+        document.getElementById('wordDisplay').textContent = message.split('.')[0]; 
+        document.getElementById('imageDisplay').src = "https://via.placeholder.com/400x300.png?text=No+Image";
+        document.getElementById('imageDisplay').alt = "No image";
+        document.getElementById('attribution').innerHTML = "";
+        document.getElementById('totalCards').textContent = 0;
+        document.getElementById('currentCardIndex').textContent = 0;
+        
+        ['prevBtn', 'nextBtn', 'flipBtn', 'playAudioBtn'].forEach(function(id) {
+            const btn = document.getElementById(id);
+            if(btn) btn.disabled = true;
+        });
+        initializeAppControls(); 
+    }
+    
+    function initializeAppControls() {
+        document.getElementById('addCardBtn').addEventListener('click', addNewCard);
+        
+        const modeToggle = document.getElementById('modeToggle');
+        if(modeToggle) {
+            modeToggle.addEventListener('change', function() {
+                const isTypingMode = this.checked;
+                document.getElementById('speechContainer').style.display = isTypingMode ? 'none' : 'flex';
+                document.getElementById('typingContainer').style.display = isTypingMode ? 'flex' : 'none';
+                
+                if (isTypingMode) {
+                    document.getElementById('typingInput').focus();
+                } else {
+                    if (recognition) requestMicPermission(); 
+                }
+                
+                document.getElementById('speechResult').textContent = '';
+                document.getElementById('typingResult').textContent = '';
+                document.getElementById('typingInput').value = '';
+            });
+        }
+
+        if (document.getElementById('speechContainer').style.display !== 'none' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+            requestMicPermission();
+        }
+    }
+
+    function initializeApp() {
+      updateFlashcard();
+      initSpeechRecognition(); 
+      updateProgressCounter();
+      
+      ['prevBtn', 'nextBtn', 'flipBtn', 'playAudioBtn'].forEach(function(id) {
+            const btn = document.getElementById(id);
+            if(btn) btn.disabled = false;
+      });
+      if (flashcards.length <=1) {
+        document.getElementById('prevBtn').disabled = true;
+        document.getElementById('nextBtn').disabled = true;
+      }
+      
+      document.getElementById('flipBtn').addEventListener('click', function() {
+        document.getElementById('flashcard').classList.toggle('flipped');
+      });
+      
+      document.getElementById('playAudioBtn').addEventListener('click', playAudio);
+      document.getElementById('startSpeechBtn').addEventListener('click', startSpeechRecognition);
+      document.getElementById('submitTypingBtn').addEventListener('click', checkTypedWord);
+      
+      document.getElementById('typingInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') checkTypedWord();
+      });
+            
+      document.getElementById('prevBtn').addEventListener('click', function() {
+        if (currentIndex > 0) {
+          currentIndex--;
+          updateFlashcard();
+          updateProgressCounter();
+          document.getElementById('flashcard').classList.remove('flipped');
+        }
+      });
+      
+      document.getElementById('nextBtn').addEventListener('click', function() {
+        if (currentIndex < flashcards.length - 1) {
+          currentIndex++;
+          updateFlashcard();
+          updateProgressCounter();
+          document.getElementById('flashcard').classList.remove('flipped');
+        }
+      });
+      
+      document.addEventListener('keydown', function(e) {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+        
+        if (e.key === 'ArrowLeft' && !document.getElementById('prevBtn').disabled) document.getElementById('prevBtn').click();
+        else if (e.key === 'ArrowRight' && !document.getElementById('nextBtn').disabled) document.getElementById('nextBtn').click();
+        else if ((e.key === ' ' || e.key === 'Spacebar') && !document.getElementById('flipBtn').disabled) {
+          document.getElementById('flipBtn').click();
+          e.preventDefault();
+        }
+      });
+      
+      document.getElementById('flashcard').addEventListener('click', function(e) {
+        if (e.target.closest('button, a, input')) return;
+        document.getElementById('flashcard').classList.toggle('flipped');
+      });
+      
+      initializeAppControls();
+    }
+
+    function requestMicPermission() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const micNotice = document.getElementById('micPermissionNotice');
+            micNotice.innerHTML = '<strong>⚠️ Your browser does not support microphone access.</strong>';
+            micNotice.style.display = 'block';
+            document.getElementById('startSpeechBtn').disabled = true;
+            document.getElementById('startSpeechBtn').innerHTML = '🔇 Not supported';
+            return;
+        }
+
+        const micNotice = document.getElementById('micPermissionNotice');
+        micNotice.style.display = 'block';
+        micNotice.innerHTML = '<strong>ℹ️ Requesting microphone access...</strong>';
+
+        navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) { 
+            micNotice.style.display = 'none';
+            stream.getTracks().forEach(function(track) { track.stop(); }); 
+        })
+        .catch(function(err) {
+            micNotice.innerHTML = '<strong>❌ Microphone access denied. Speech recognition will not work. (' + err.name + ')</strong>';
+            console.error("Mic permission error:", err);
+            document.getElementById('startSpeechBtn').disabled = true; 
+        });
+    }
+    
+    function addNewCard() {
+        const wordInput = document.getElementById('newWord');
+        const word = wordInput.value.trim();
+        
+        if (word) {
+          document.getElementById('loading').style.display = 'inline-block';
+          document.getElementById('addCardBtn').disabled = true;
+          
+          google.script.run
+            .withSuccessHandler(function(result) {
+              if (result.success) {
+                const newCard = { word: word, image: result.imageUrl };
+                flashcards.push(newCard);
+                google.script.run.saveFlashcards(flashcards); 
+                
+                if (flashcards.length === 1) { 
+                    currentIndex = 0;
+                    initializeApp(); 
+                } else {
+                    updateProgressCounter();
+                    if (currentIndex === flashcards.length - 2) {
+                        document.getElementById('nextBtn').disabled = false;
+                    }
+                }
+                
+                wordInput.value = '';
+                alert('New flashcard added!');
+              } else {
+                alert('Error fetching image: ' + (result.error || 'Unknown error'));
+              }
+              document.getElementById('loading').style.display = 'none';
+              document.getElementById('addCardBtn').disabled = false;
+            })
+            .withFailureHandler(function(error) {
+              alert('Error: ' + error);
+              document.getElementById('loading').style.display = 'none';
+              document.getElementById('addCardBtn').disabled = false;
+            })
+            .searchPexelsImage(word);
+        } else {
+          alert('Please enter a word');
+        }
+    }
+
+    function playSuccessChime() {
+      console.log("Attempting to play success chime."); 
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) {
+          console.log('Web Audio API not supported, no chime will play.');
+          return;
+        }
+        const audioCtx = new AudioContext();
+        
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().then(function() {
+                console.log("AudioContext resumed by playSuccessChime.");
+                proceedWithChimePlayback(audioCtx);
+            }).catch(function(e) {
+                console.error("Error resuming AudioContext: ", e);
+            });
+        } else {
+            proceedWithChimePlayback(audioCtx);
+        }
+      } catch (error) {
+        console.error('Error setting up AudioContext for success chime:', error);
+      }
+    }
+
+    function proceedWithChimePlayback(audioCtx) { 
+        console.log("Attempting to play more celebratory chime.");
+        const baseTime = audioCtx.currentTime;
+        const overallGain = 0.25; 
+
+        const frequencies = [
+            523.25, // C5
+            659.25, // E5
+            783.99, // G5
+            1046.50 // C6 
+        ];
+
+        const staggerAmount = 0.06; 
+        const attackTime = 0.01;   
+        const decayTime = 0.7;     
+        const releaseTime = 0.2;   
+
+        frequencies.forEach(function(freq, index) {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            osc.type = 'sine'; 
+            osc.frequency.setValueAtTime(freq, baseTime);
+
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const noteStartTime = baseTime + (index * staggerAmount);
+            
+            let currentNoteGain = overallGain;
+            if (index === frequencies.length - 1) { 
+                currentNoteGain *= 0.7; 
+            }
+
+            gainNode.gain.setValueAtTime(0, noteStartTime); 
+            gainNode.gain.linearRampToValueAtTime(currentNoteGain, noteStartTime + attackTime);
+            gainNode.gain.exponentialRampToValueAtTime(currentNoteGain * 0.1, noteStartTime + attackTime + decayTime); 
+            gainNode.gain.linearRampToValueAtTime(0.0001, noteStartTime + attackTime + decayTime + releaseTime);
+
+            osc.start(noteStartTime);
+            osc.stop(noteStartTime + attackTime + decayTime + releaseTime + 0.1); 
+        });
+        console.log("Celebratory chime playback scheduled.");
+    }
+    
+    function initSpeechRecognition() {
+      if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US'; 
+    
+        recognition.onresult = function(event) {
+          const speechResultText = event.results[0][0].transcript.toLowerCase().trim();
+          const currentWord = flashcards[currentIndex].word.toLowerCase().trim();
+          const confidence = event.results[0][0].confidence;
+          
+          const resultDisplay = document.getElementById('speechResult');
+          resultDisplay.textContent = 'You said: "' + event.results[0][0].transcript.trim() + '"';
+          
+          if (isCorrectPronunciation(speechResultText, currentWord, confidence)) {
+            resultDisplay.style.color = '#4CAF50';
+            resultDisplay.textContent += ' - Correct! 👍';
+            playSuccessChime();
+          } else {
+            resultDisplay.style.color = '#f44336';
+            resultDisplay.textContent += ' - Try again! 🔄';
+          }
+        };
+    
+        recognition.onerror = function(event) {
+          let errorMsg = 'Error: ' + event.error;
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            errorMsg = '⚠️ Mic access denied. Check browser settings.';
+            document.getElementById('startSpeechBtn').disabled = true;
+            requestMicPermission(); 
+          } else if (event.error === 'no-speech') {
+            errorMsg = '😶 No speech detected. Try again.';
+          } else if (event.error === 'network') {
+            errorMsg = '🌐 Network error with speech service.';
+          } else if (event.error === 'audio-capture') {
+            errorMsg = '🎤 Audio capture error. Check microphone.';
+          }
+          document.getElementById('speechResult').style.color = '#f44336';
+          document.getElementById('speechResult').textContent = errorMsg;
+        };
+
+        recognition.onstart = function() {
+            document.getElementById('startSpeechBtn').innerHTML = '<i class="mic-icon">🎙️</i> Listening...';
+            document.getElementById('startSpeechBtn').disabled = true;
+        };
+        recognition.onend = function() {
+            document.getElementById('startSpeechBtn').innerHTML = '<i class="mic-icon">🎤</i> Say it';
+            document.getElementById('startSpeechBtn').disabled = false;
+        };
+
+      } else {
+        document.getElementById('startSpeechBtn').disabled = true;
+        document.getElementById('startSpeechBtn').innerHTML = '🔇 Not supported';
+        const speechResultDiv = document.getElementById('speechResult');
+        if (speechResultDiv) speechResultDiv.textContent = 'Speech recognition not supported.';
+        if (document.getElementById('modeToggle').checked === false) { 
+            document.getElementById('micPermissionNotice').innerHTML = '<strong>⚠️ Speech recognition is not supported in your browser. Try typing mode.</strong>';
+            document.getElementById('micPermissionNotice').style.display = 'block';
+        }
+      }
+    }
+    
+    function isCorrectPronunciation(spoken, target, confidence) {
+      if (spoken === target) return true;
+      const wordBoundaryRegex = new RegExp('\\b' + target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i'); 
+      if (wordBoundaryRegex.test(spoken) && confidence > 0.75) return true; 
+      
+      if (!target.includes(" ") && !spoken.includes(" ")) { 
+        const distance = levenshteinDistance(spoken, target);
+        const maxLength = Math.max(spoken.length, target.length);
+        if (maxLength <= 4 && distance <=1 && confidence > 0.7) return true; 
+        if (maxLength > 4 && distance <= Math.floor(maxLength / 4) && confidence > 0.7) return true; 
+      }
+      return false;
+    }
+
+    function levenshteinDistance(a, b) {
+      const matrix = Array(b.length + 1).fill(null).map(function() { return Array(a.length + 1).fill(null); });
+      for (let i = 0; i <= a.length; i += 1) matrix[0][i] = i;
+      for (let j = 0; j <= b.length; j += 1) matrix[j][0] = j;
+      for (let j = 1; j <= b.length; j += 1) {
+        for (let i = 1; i <= a.length; i += 1) {
+          const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[j][i] = Math.min(
+            matrix[j][i - 1] + 1,       
+            matrix[j - 1][i] + 1,       
+            matrix[j - 1][i - 1] + indicator, 
+          );
+        }
+      }
+      return matrix[b.length][a.length];
+    }
+    
+    function updateFlashcard() {
+      if (!flashcards || flashcards.length === 0 || currentIndex < 0 || currentIndex >= flashcards.length) {
+        handleNoFlashcards(flashcards.length === 0 ? undefined : "Card Error");
+        return;
+      }
+      
+      const currentCard = flashcards[currentIndex];
+      document.getElementById('wordDisplay').textContent = currentCard.word;
+      const imgEl = document.getElementById('imageDisplay');
+      imgEl.src = currentCard.image;
+      imgEl.alt = currentCard.word; 
+      
+      document.getElementById('speechResult').textContent = '';
+      document.getElementById('typingResult').textContent = '';
+      document.getElementById('typingInput').value = '';
+      
+      const attributionDiv = document.getElementById('attribution');
+      attributionDiv.innerHTML = 'Image from <a href="https://www.pexels.com" target="_blank" rel="noopener noreferrer">Pexels</a>';
+      
+      document.getElementById('prevBtn').disabled = currentIndex === 0;
+      document.getElementById('nextBtn').disabled = currentIndex === flashcards.length - 1;
+    }
+    
+    function updateProgressCounter() {
+      if (!flashcards) return;
+      document.getElementById('currentCardIndex').textContent = flashcards.length > 0 ? currentIndex + 1 : 0;
+      document.getElementById('totalCards').textContent = flashcards.length;
+    }
+    
+    function playAudio() {
+      if (synth.speaking) synth.cancel();
+      if (!flashcards || flashcards.length === 0) return;
+      
+      const utterance = new SpeechSynthesisUtterance(flashcards[currentIndex].word);
+      utterance.lang = 'en-US'; 
+      utterance.rate = 0.9; 
+      synth.speak(utterance);
+    }
+    
+    function checkTypedWord() {
+      if (!flashcards || flashcards.length === 0) return;
+      const typedWordOriginal = document.getElementById('typingInput').value.trim();
+      const typedWord = typedWordOriginal.toLowerCase();
+      const currentWord = flashcards[currentIndex].word.toLowerCase().trim();
+      
+      const resultDisplay = document.getElementById('typingResult');
+      resultDisplay.textContent = 'You typed: "' + typedWordOriginal + '"';
+      
+      if (isCorrectSpelling(typedWord, currentWord)) {
+        resultDisplay.style.color = '#4CAF50';
+        resultDisplay.textContent += ' - Correct! 👍';
+        playSuccessChime();
+        document.getElementById('typingInput').value = ''; 
+      } else {
+        resultDisplay.style.color = '#f44336';
+        resultDisplay.textContent += ' - Try again! 🔄';
+      }
+    }
+    
+    function isCorrectSpelling(typed, target) {
+      if (typed === target) return true;
+      const distance = levenshteinDistance(typed, target);
+      const maxLength = Math.max(typed.length, target.length);
+      if (maxLength <= 4 && distance <=1) return true;
+      if (maxLength > 4 && distance <= Math.floor(maxLength / 4)) return true; 
+      return false;
+    }
+    
+    function startSpeechRecognition() {
+      if (recognition) {
+        try {
+          recognition.start();
+        } catch (err) {
+          console.error("Error starting speech recognition:", err);
+          const resultDisplay = document.getElementById('speechResult');
+          resultDisplay.textContent = 'Error starting. Try again or refresh.';
+          resultDisplay.style.color = '#f44336';
+          document.getElementById('startSpeechBtn').innerHTML = '<i class="mic-icon">🎤</i> Say it';
+          document.getElementById('startSpeechBtn').disabled = false;
+        }
+      } else {
+        document.getElementById('speechResult').textContent = 'Speech rec. not available.';
+        document.getElementById('speechResult').style.color = '#f44336';
+      }
+    }
+
+    window.addEventListener('load', function() {
+      const imageDisplay = document.getElementById('imageDisplay');
+      if (imageDisplay) {
+        imageDisplay.onerror = function() {
+            const fallbackSrc = "https://via.placeholder.com/400x300.png?text=Image+Not+Found";
+            if (this.src !== fallbackSrc) { 
+                this.src = fallbackSrc;
+            }
+            console.warn('Image failed to load, using fallback:', this.alt);
+            const attributionDiv = document.getElementById('attribution');
+            if (attributionDiv) attributionDiv.innerHTML = 'Fallback image (source unknown)';
+        };
+      }
+    });
+  </script>
+</body>
+</html>
