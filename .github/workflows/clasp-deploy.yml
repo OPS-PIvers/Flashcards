@@ -16,7 +16,9 @@ jobs:
           node-version: '18'
           
       - name: Install dependencies
-        run: npm install -g @google/clasp
+        run: |
+          npm install -g @google/clasp
+          npm install googleapis  # Install locally, not globally
           
       - name: Authenticate with Google
         run: |
@@ -24,7 +26,6 @@ jobs:
           echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
           
           # Force refresh of the access token
-          npm install -g googleapis
           node -e '
           const fs = require("fs");
           const {google} = require("googleapis");
