@@ -16,40 +16,10 @@ jobs:
           node-version: '18'
           
       - name: Install dependencies
-        run: |
-          npm install -g @google/clasp
-          npm install googleapis  # Install locally, not globally
+        run: npm install -g @google/clasp
           
       - name: Authenticate with Google
-        run: |
-          # Create .clasprc.json with refresh token
-          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
-          
-          # Force refresh of the access token
-          node -e '
-          const fs = require("fs");
-          const {google} = require("googleapis");
-          
-          const clasprc = JSON.parse(fs.readFileSync(process.env.HOME + "/.clasprc.json"));
-          
-          const oauth2Client = new google.auth.OAuth2(
-            clasprc.oauth2ClientSettings.clientId,
-            clasprc.oauth2ClientSettings.clientSecret,
-            clasprc.oauth2ClientSettings.redirectUri
-          );
-          
-          oauth2Client.setCredentials({refresh_token: clasprc.token.refresh_token});
-          
-          oauth2Client.getAccessToken().then(response => {
-            clasprc.token.access_token = response.token;
-            clasprc.token.expiry_date = Date.now() + 3600000;
-            fs.writeFileSync(process.env.HOME + "/.clasprc.json", JSON.stringify(clasprc, null, 2));
-            console.log("Token refreshed successfully");
-          }).catch(err => {
-            console.error("Error refreshing token:", err);
-            process.exit(1);
-          });
-          '
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
           
       - name: Push to Google Apps Script
         run: clasp push -f
